@@ -54,6 +54,21 @@ struct MarginFilterTests {
         #expect(!profile.isRunningMargin(middle, pageHeight: 800))
     }
 
+    @Test("code at a page's edge isn't a running margin, even when it repeats")
+    func codeIsNotAMargin() {
+        let profile = DocumentProfile(
+            pageCount: 10,
+            bodySize: 10,
+            headingBands: [],
+            title: DocumentTitle(text: "t", lineTexts: []),
+            repeatedMarginKeys: ["}"],
+            repeatedImageDigests: [],
+            isSlideDeck: false
+        )
+        let brace = line("}", y: 780, size: 8, font: .mono)
+        #expect(!profile.isRunningMargin(brace, pageHeight: 800))
+    }
+
     @Test(
         "keys ignore digits and roman numerals",
         arguments: [
@@ -439,6 +454,25 @@ struct BlockBuilderTests {
             line("c();", x: 72, y: 136, font: .mono),
         ])
         #expect(result == [.code(["a();", "", "b();", "c();"])])
+    }
+
+    @Test("inline code holding backticks gets a longer fence that CommonMark can read")
+    func inlineCodeWithBackticks() {
+        let input = TextLine(words: [
+            word("usa", x: 72, y: 100),
+            word("``hola''", x: 90, y: 100, font: .mono),
+            word("aqui", x: 140, y: 100),
+        ])
+        #expect(blocks([input]) == [.paragraph("usa ``` ``hola'' ``` aqui")])
+    }
+
+    @Test("a lone backtick in inline code still gets a double fence")
+    func inlineCodeWithOneBacktick() {
+        let input = TextLine(words: [
+            word("usa", x: 72, y: 100),
+            word("a`b", x: 90, y: 100, font: .mono),
+        ])
+        #expect(blocks([input]) == [.paragraph("usa ``a`b``")])
     }
 
     @Test("monospace words in prose become inline code")

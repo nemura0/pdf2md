@@ -268,6 +268,12 @@ struct RunIndex {
     /// From probes: run origins sit up to this far from PDFKit's word rect.
     private static let verticalTolerance = 2.0
     private static let horizontalTolerance = 1.5
+    /// How far up from its bottom a word's rect holds the baseline. Measured 0.21 to 0.24 on a
+    /// LuaLaTeX book, across 8 and 10 pt.
+    private static let baselineShareFromBottom = 0.22
+    /// Scripts sit up to this many font sizes from their base, and even tight leading is at least
+    /// one font size, so this takes in a word's scripts and never the next line.
+    private static let scriptReach = 0.6
 
     private let runs: [TextRun]
     private let baselines: [Double]
@@ -294,11 +300,29 @@ struct RunIndex {
         return low
     }
 
+    /// The runs on a word's own line. PDFKit's rect follows the font's bounding box, so it can be
+    /// taller than the leading: 14.6 against 11.9 in a LaTeX book, which puts the line above's
+    /// baseline inside it. Taking that run gave a word the wrong baseline, and the wrong font if
+    /// the line above had code at that x.
+    private func runsOnLine(of rect: CGRect) -> [TextRun] {
+        let nearby = candidates(for: rect)
+        let expected = rect.maxY - rect.height * Self.baselineShareFromBottom
+        let own = nearby.filter { $0.isHorizontal && overlapsHorizontally($0, rect) }
+            .min { abs($0.baseline - expected) < abs($1.baseline - expected) }
+        guard let own else { return Array(nearby) }
+        let reach = own.size * Self.scriptReach
+        return nearby.filter { !$0.isHorizontal || abs($0.baseline - own.baseline) <= reach }
+    }
+
+    private func overlapsHorizontally(_ run: TextRun, _ rect: CGRect) -> Bool {
+        run.originX <= rect.maxX && (!run.hasReliableEnd || run.endX >= rect.minX)
+    }
+
     /// The show operation containing a word's start: the last one starting at or before it that
     /// hasn't ended yet. On a tie, the one closest to the rect's vertical middle.
     func bestRun(for rect: CGRect) -> TextRun? {
         var best: TextRun?
-        for run in candidates(for: rect) {
+        for run in runsOnLine(of: rect) {
             guard run.isHorizontal else {
                 if rect.minY - Self.verticalTolerance <= run.baseline, best == nil,
                     abs(run.originX - rect.midX) < rect.width
@@ -328,7 +352,7 @@ struct RunIndex {
     /// Runs overlapping a word, one per distinct style, in x order. More than one means the word
     /// crosses a font or baseline boundary.
     func distinctRuns(overlapping rect: CGRect) -> [TextRun] {
-        var overlapping = candidates(for: rect).filter { run in
+        var overlapping = runsOnLine(of: rect).filter { run in
             run.isHorizontal && run.originX < rect.maxX - Self.horizontalTolerance
                 && (!run.hasReliableEnd || run.endX > rect.minX + Self.horizontalTolerance)
         }

@@ -387,6 +387,9 @@ final class ScanState {
 
     // MARK: Digests
 
+    /// A drawing on a transparent background can be all black, with the picture held entirely in
+    /// its mask. Measured on a real book: figures with byte-identical pixels and different masks,
+    /// which then shared one crop. So an image's identity covers its masks too.
     private func streamDigest(_ stream: CGPDFStreamRef) -> String {
         if let known = digests[stream] { return known }
         var format = CGPDFDataFormat.raw
@@ -394,10 +397,24 @@ final class ScanState {
         if let data = CGPDFStreamCopyData(stream, &format) {
             hasher.update(data: data as Data)
         }
+        for mask in maskStreams(of: stream) {
+            var maskFormat = CGPDFDataFormat.raw
+            if let data = CGPDFStreamCopyData(mask, &maskFormat) {
+                hasher.update(data: data as Data)
+            }
+        }
         let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         digests[stream] = digest
         if format == .jpegEncoded || format == .JPEG2000 { photoDigests.insert(digest) }
         return digest
+    }
+
+    private func maskStreams(of stream: CGPDFStreamRef) -> [CGPDFStreamRef] {
+        guard let dictionary = CGPDFStreamGetDictionary(stream) else { return [] }
+        return ["SMask", "Mask"].compactMap { key in
+            var mask: CGPDFStreamRef?
+            return CGPDFDictionaryGetStream(dictionary, key, &mask) ? mask : nil
+        }
     }
 
     /// Wrapper Forms such as `/Im0 Do` share bytes while showing different images, so a Form's

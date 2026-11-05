@@ -55,7 +55,8 @@ public enum LineBuilder {
         return kept
     }
 
-    /// Splits at column gaps. Monospace words never split, since wide gaps there are alignment.
+    /// Splits at column gaps. Monospace words never split, since wide gaps there are alignment,
+    /// and neither does a line number from its code, however deeply that code is indented.
     private static func segments(of words: [Word]) -> [[Word]] {
         var segments: [[Word]] = []
         for word in words {
@@ -64,7 +65,9 @@ public enum LineBuilder {
                 continue
             }
             let gap = word.rect.minX - previous.rect.maxX
-            let isAlignment = word.font.isMonospace && previous.font.isMonospace
+            let isAlignment =
+                word.font.isMonospace
+                && (previous.font.isMonospace || TextLine.isLineNumber(previous, before: word))
             if gap > columnGap * max(word.size, previous.size), !isAlignment {
                 segments.append([word])
             } else {

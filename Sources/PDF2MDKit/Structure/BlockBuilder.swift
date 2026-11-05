@@ -34,7 +34,7 @@ public struct BlockBuilder: Sendable {
         let slideTitle = isSlidePage && allowsSlideTitle ? slideTitleLine(in: lines) : nil
 
         for (index, line) in lines.enumerated() {
-            if line.isMonospace {
+            if line.isMonospace || isBlankListingLine(at: index, in: lines) {
                 state.addCode(line)
             } else if index != slideTitle, listStart(in: line) == nil,
                 let latex = MathSpans.displayLatex(line)
@@ -56,6 +56,24 @@ public struct BlockBuilder: Sendable {
         }
         state.flush()
         return state.blocks
+    }
+
+    /// A listing's blank line still has its number, and a line citing it needs that number. It
+    /// counts only with numbered code next to it, past any other blank ones.
+    private func isBlankListingLine(at index: Int, in lines: [TextLine]) -> Bool {
+        guard isNumberAlone(lines[index]) else { return false }
+        let before = lines[..<index].last { !isNumberAlone($0) }
+        let after = lines[(index + 1)...].first { !isNumberAlone($0) }
+        return [before, after].contains { neighbor in
+            guard let neighbor, neighbor.lineNumber != nil, neighbor.isMonospace else {
+                return false
+            }
+            return lines[index].size <= neighbor.size
+        }
+    }
+
+    private func isNumberAlone(_ line: TextLine) -> Bool {
+        line.words.count == 1 && TextLine.isPlainNumber(line.words[0])
     }
 
     /// The top line, if it's clearly larger than the rest of the slide or set in bold.
@@ -310,10 +328,14 @@ enum CodeLayout {
     private static let blankLineRatio = 1.6
     /// A malformed page can place words anywhere, and this much indentation is already absurd.
     private static let maximumSpaces = 200.0
+    private static let indentStepTolerance = 0.15
 
     static func lines(from lines: [TextLine]) -> [String] {
-        let cell = characterWidth(in: lines)
-        let base = lines.map(\.rect.minX).min() ?? 0
+        let code = lines.filter { !isNumberOnly($0) }
+        let cell = characterWidth(in: code)
+        let base = code.compactMap { $0.contentWords.first.map { Double($0.rect.minX) } }.min() ?? 0
+        let indent = indentCell(of: code, base: base, glyphCell: cell)
+        let numberWidth = lines.map { number(of: $0)?.count ?? 0 }.max() ?? 0
         let gaps = zip(lines, lines.dropFirst()).map { $1.baseline - $0.baseline }.filter { $0 > 1 }
         let leading = gaps.min() ?? 0
 
@@ -325,16 +347,43 @@ enum CodeLayout {
             {
                 output.append("")
             }
-            output.append(render(line, base: base, cell: cell))
+            output.append(
+                render(line, base: base, cell: cell, indentCell: indent, numberWidth: numberWidth)
+            )
             previous = line
         }
         return output
     }
 
-    private static func render(_ line: TextLine, base: Double, cell: Double) -> String {
-        var text = String(repeating: " ", count: spaces(line.rect.minX - base, cell: cell))
+    /// A blank line of a numbered listing, whose only word is its number.
+    private static func isNumberOnly(_ line: TextLine) -> Bool {
+        !line.isMonospace && line.lineNumber == nil && line.words.count == 1
+            && TextLine.isPlainNumber(line.words[0])
+    }
+
+    private static func number(of line: TextLine) -> String? {
+        line.lineNumber?.text ?? (isNumberOnly(line) ? line.words[0].text : nil)
+    }
+
+    /// Numbers are right-aligned in their own column, so indentation still reads as code does.
+    private static func render(
+        _ line: TextLine,
+        base: Double,
+        cell: Double,
+        indentCell: Double,
+        numberWidth: Int
+    ) -> String {
+        var text = ""
+        if numberWidth > 0 {
+            let number = number(of: line) ?? ""
+            text += String(repeating: " ", count: numberWidth - number.count) + number
+            if isNumberOnly(line) { return text }
+            text += " "
+        }
+        let start = line.contentWords.first.map { Double($0.rect.minX) } ?? base
+        text += String(repeating: " ", count: spaces(start - base, cell: indentCell))
         var previous: Word?
-        for word in line.words {
+        for word in line.contentWords {
             if let previous, !word.isGlued {
                 let gap = word.rect.minX - previous.rect.maxX
                 text += String(repeating: " ", count: max(1, spaces(gap, cell: cell)))
@@ -345,13 +394,33 @@ enum CodeLayout {
         return text
     }
 
+    /// The width of one space of indentation. LaTeX's `listings` sets leading spaces wider than
+    /// its glyphs (measured: 4.83 against 4.62 at 8 pt), so measuring by glyphs drifts with depth,
+    /// and a third level comes out at 13 spaces rather than 12. When every indent is a multiple
+    /// of the smallest one, that's the code's real step, whatever its width.
+    private static func indentCell(
+        of lines: [TextLine],
+        base: Double,
+        glyphCell: Double
+    ) -> Double {
+        guard glyphCell > 0 else { return glyphCell }
+        let indents = lines.compactMap { $0.contentWords.first.map { Double($0.rect.minX) - base } }
+            .filter { $0 > glyphCell / 2 }
+        guard let step = indents.min() else { return glyphCell }
+        let isRegular = indents.allSatisfy { indent in
+            abs(indent / step - (indent / step).rounded()) <= indentStepTolerance
+        }
+        let spacesPerStep = (step / glyphCell).rounded()
+        return isRegular && spacesPerStep >= 1 ? step / spacesPerStep : glyphCell
+    }
+
     private static func spaces(_ distance: Double, cell: Double) -> Int {
         guard cell > 0, distance > 0, distance.isFinite else { return 0 }
         return Int(min((distance / cell).rounded(), maximumSpaces))
     }
 
     private static func characterWidth(in lines: [TextLine]) -> Double {
-        let widths = lines.flatMap(\.words)
+        let widths = lines.flatMap(\.contentWords)
             .filter { !$0.text.isEmpty }
             .map { $0.rect.width / Double($0.text.count) }
             .sorted()
