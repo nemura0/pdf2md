@@ -406,7 +406,10 @@ struct DetachAndCancelTests {
         )
         #expect(result.status == 0)
         #expect(Date().timeIntervalSince(started) < 3)
-        #expect(!(try workspace.names().contains("long.md")))
+        // The child reserves `long.md` empty as soon as it starts, within about 30 ms of this
+        // process returning, so the name proves nothing. A finished file has content.
+        let output = URL(fileURLWithPath: workspace.path("long.md"))
+        #expect(((try? Data(contentsOf: output)) ?? Data()).isEmpty)
 
         let isDone = waitUntil {
             ((try? String(contentsOf: stub.log, encoding: .utf8)) ?? "").contains("Converted")
