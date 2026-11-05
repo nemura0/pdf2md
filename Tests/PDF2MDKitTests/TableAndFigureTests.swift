@@ -145,6 +145,37 @@ struct TableGridTests {
         #expect(TableGrid.rows(for: oneColumn, pageSize: page, words: nil) == nil)
     }
 
+    @Test("impossible ranges from outside are rejected, not trusted")
+    func badRanges() {
+        let negative = RecognizedCell(
+            text: "x",
+            rect: CGRect(x: 0, y: 0, width: 1, height: 1),
+            rows: -1...1,
+            columns: 0...1
+        )
+        #expect(TableGrid.rows(for: table([negative]), pageSize: page, words: nil) == nil)
+        let huge = RecognizedCell(
+            text: "x",
+            rect: CGRect(x: 0, y: 0, width: 1, height: 1),
+            rows: 0...1_000_000,
+            columns: 0...1_000_000
+        )
+        #expect(TableGrid.rows(for: table([huge]), pageSize: page, words: nil) == nil)
+    }
+
+    @Test("two spans starting at one position keep both texts")
+    func sharedStart() {
+        let rows = TableGrid.rows(
+            for: table([
+                cell("one", row: 0, column: 0), cell("two", row: 0, column: 0, columns: 2),
+                cell("c", row: 1, column: 0), cell("d", row: 1, column: 1),
+            ]),
+            pageSize: page,
+            words: nil
+        )
+        #expect(rows?[0][0] == "one two")
+    }
+
     @Test("a mostly empty grid isn't a table")
     func mostlyEmpty() {
         let sparse = table([
@@ -344,6 +375,24 @@ struct ObjectPlacementTests {
         )
     }
 
+    @Test("a large line stays when its object only covers labels")
+    func labels() {
+        var figure = object(CGRect(x: 60, y: 100, width: 300, height: 100))
+        figure.largestCoveredSize = 11
+        let lines = [line("axis label", y: 120), line("A heading", y: 160, size: 18)]
+        #expect(
+            ObjectPlacement.removingCovered(lines, by: [figure]).map(\.text) == ["A heading"]
+        )
+    }
+
+    @Test("an object inside an earlier covering object is dropped, since it has the same words")
+    func overlaps() {
+        let table = object(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let inner = object(CGRect(x: 10, y: 10, width: 20, height: 20))
+        let apart = object(CGRect(x: 200, y: 0, width: 20, height: 20))
+        #expect(ObjectPlacement.removingOverlaps([table, inner, apart]) == [table, apart])
+    }
+
     @Test("no objects leave one run of lines, and no lines leave just the objects")
     func empty() {
         let lines = [line("text", y: 50)]
@@ -381,6 +430,14 @@ struct PageRecognitionTests {
     @Test("a table pass keeps the text layer")
     func tablesOnly() {
         let result = PageRecognition.applying(recognized, to: page, needsOCR: false)
+        #expect(result.words.map(\.text) == ["layer"])
+        #expect(!result.isOCR)
+    }
+
+    @Test("when OCR finds nothing, a text layer stays, as with a stamp over a blank scan")
+    func emptyOCR() {
+        let empty = RecognizedPage(lines: [], tables: [])
+        let result = PageRecognition.applying(empty, to: page, needsOCR: true)
         #expect(result.words.map(\.text) == ["layer"])
         #expect(!result.isOCR)
     }

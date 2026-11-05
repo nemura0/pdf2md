@@ -65,13 +65,19 @@ actor PageWorker {
         }
     }
 
-    func finish(_ prepared: PreparedPage, recognized: RecognizedPage?) -> PageRecord {
+    func finish(
+        _ prepared: PreparedPage,
+        recognized: RecognizedPage?,
+        failure: String?
+    ) -> PageRecord {
         defer { slot?.unlock() }
-        return PageRecognition.applying(
+        var record = PageRecognition.applying(
             recognized,
             to: prepared.record,
             needsOCR: prepared.needsOCR
         )
+        record.note = record.note ?? failure
+        return record
     }
 
     private func read(pageIndex: Int) throws -> PreparedPage {
@@ -114,8 +120,13 @@ actor PageWorker {
             plan.usesVision || figures.contains { cropNames[$0.digest] == nil }
             || (options.includeImages && !stacked.isEmpty)
         let rendered = needsRender ? PageRenderer.render(page, size: geometry.size) : nil
-        record.figures = try cropped(figures, from: rendered)
-        record.equations = try cropped(stacked, pageIndex: pageIndex, from: rendered)
+        record.figures = cropped(figures, from: rendered, note: &record.note)
+        record.equations = cropped(
+            stacked,
+            pageIndex: pageIndex,
+            from: rendered,
+            note: &record.note
+        )
         return PreparedPage(
             record: record,
             image: plan.usesVision ? rendered?.image : nil,
@@ -127,20 +138,22 @@ actor PageWorker {
     /// every page is cropped here too, since only emit knows that it repeats.
     private func cropped(
         _ figures: [FigureCandidate],
-        from rendered: RenderedPage?
-    ) throws -> [FigureCandidate] {
+        from rendered: RenderedPage?,
+        note: inout String?
+    ) -> [FigureCandidate] {
         guard let cropDirectory else { return figures }
-        return try figures.map { figure in
+        return figures.map { figure in
             var result = figure
             if let known = cropNames[figure.digest] {
                 result.cropFile = known
             } else if let rendered {
-                result.cropFile = try CropWriter.write(
+                result.cropFile = crop(
                     rendered,
                     rect: figure.rect,
                     isPhoto: figure.isPhoto,
                     name: figure.digest,
-                    directory: cropDirectory
+                    directory: cropDirectory,
+                    note: &note
                 )
                 cropNames[figure.digest] = result.cropFile
             }
@@ -151,21 +164,48 @@ actor PageWorker {
     private func cropped(
         _ equations: [StackedEquation],
         pageIndex: Int,
-        from rendered: RenderedPage?
-    ) throws -> [EquationCrop] {
-        try equations.enumerated().map { offset, equation in
-            let rect = equation.rect.insetBy(dx: -Self.equationPadding, dy: -Self.equationPadding)
-            var crop = EquationCrop(rect: equation.rect, latex: equation.linearLatex)
+        from rendered: RenderedPage?,
+        note: inout String?
+    ) -> [EquationCrop] {
+        equations.enumerated().map { offset, equation in
+            var result = EquationCrop(rect: equation.rect, latex: equation.linearLatex)
             if let rendered, let cropDirectory, options.includeImages {
-                crop.cropFile = try CropWriter.write(
+                result.cropFile = crop(
                     rendered,
-                    rect: rect,
+                    rect: equation.rect.insetBy(
+                        dx: -Self.equationPadding,
+                        dy: -Self.equationPadding
+                    ),
                     isPhoto: false,
                     name: "equation-\(pageIndex)-\(offset)",
-                    directory: cropDirectory
+                    directory: cropDirectory,
+                    note: &note
                 )
             }
-            return crop
+            return result
+        }
+    }
+
+    /// A crop that can't be written costs that image, never the page's text.
+    private func crop(
+        _ rendered: RenderedPage,
+        rect: CGRect,
+        isPhoto: Bool,
+        name: String,
+        directory: URL,
+        note: inout String?
+    ) -> String? {
+        do {
+            return try CropWriter.write(
+                rendered,
+                rect: rect,
+                isPhoto: isPhoto,
+                name: name,
+                directory: directory
+            )
+        } catch {
+            note = note ?? "an image was skipped: \(error.localizedDescription)"
+            return nil
         }
     }
 

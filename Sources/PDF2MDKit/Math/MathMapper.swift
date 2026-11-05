@@ -96,6 +96,7 @@ public enum MathMapper {
             return commands[plain] ?? String(plain)
         }
         if let command = commands[character] { return command }
+        if character == "<" { return #"\lt"# }  // A bare `<` can read as an HTML tag (A11).
         return escaped.contains(character) ? "\\\(character)" : String(character)
     }
 
@@ -136,7 +137,8 @@ public enum MathMapper {
         return [
             LetterRange(scalars: 0x1D400...0x1D6A3, cycle: 52, characters: latin),
             LetterRange(
-                scalars: 0x1D6A8...0x1D7CB,
+                // The two after this are bold digamma, which has no place in this table.
+                scalars: 0x1D6A8...0x1D7C9,
                 cycle: 58,
                 characters: upperGreek + lowerGreek
             ),

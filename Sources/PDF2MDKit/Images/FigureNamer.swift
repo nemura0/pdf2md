@@ -16,6 +16,10 @@ struct FigureNamer {
         self.assetsName = assetsName
     }
 
+    func hasCrop(for digest: String) -> Bool {
+        namesByDigest[digest] != nil
+    }
+
     /// The relative link for a figure, or nil if it's dropped: a logo repeated across the
     /// document, or a crop that couldn't be made. An identical image links to its first copy.
     mutating func link(for figure: FigureCandidate, pageIndex: Int) -> String? {

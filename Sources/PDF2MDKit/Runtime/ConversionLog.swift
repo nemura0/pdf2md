@@ -37,6 +37,8 @@ public struct ConversionLog: Sendable {
         ]
         if let output = outcome.output { fields.append("output=\(quoted(output))") }
         if let error = outcome.error { fields.append("error=\(quoted(error))") }
+        if stats.failedPages > 0 { fields.append("failed_pages=\(stats.failedPages)") }
+        if let note = stats.firstNote { fields.append("note=\(quoted(note))") }
         return fields.joined(separator: " ")
     }
 

@@ -6,6 +6,7 @@ struct PageAssembler {
     /// A few words over an image are its labels, already in the crop. Beyond this, it's text set
     /// over a picture, and the text is what the reader needs.
     private static let maximumFigureLabelWords = 30
+    private static let largestLabelRatio = 1.1
 
     private let profile: DocumentProfile
     private let builder: BlockBuilder
@@ -23,8 +24,9 @@ struct PageAssembler {
         let tables = record.tables.map {
             PageObject(rect: $0.rect, blocks: [.table($0.rows)], coversText: true)
         }
-        let objects =
-            tables + figures(of: record, namer: &namer) + equations(of: record, namer: &namer)
+        let objects = ObjectPlacement.removingOverlaps(
+            tables + equations(of: record, namer: &namer) + figures(of: record, namer: &namer)
+        )
         // Covered lines go first, since a table's rows would read as columns of text.
         let flowing = ObjectPlacement.removingCovered(lines, by: objects)
         var blocks: [Block] = []
@@ -50,14 +52,20 @@ struct PageAssembler {
 
     private func figures(of record: PageRecord, namer: inout FigureNamer) -> [PageObject] {
         record.figures.compactMap { figure in
+            let isFirstCopy = !namer.hasCrop(for: figure.digest)
             guard let link = namer.link(for: figure, pageIndex: record.index) else { return nil }
             let inside = record.words.filter { word in
                 figure.rect.contains(CGPoint(x: word.rect.midX, y: word.rect.midY))
             }
+            // A reused crop was rendered from another page, so this page's text isn't in it. A
+            // photo's overlaid text is meant to be read, not a chart's axis label.
+            let holdsItsLabels =
+                isFirstCopy && !figure.isPhoto && inside.count < Self.maximumFigureLabelWords
             return PageObject(
                 rect: figure.rect,
                 blocks: [.figure(path: link)],
-                coversText: inside.count < Self.maximumFigureLabelWords
+                coversText: holdsItsLabels,
+                largestCoveredSize: profile.bodySize * Self.largestLabelRatio
             )
         }
     }

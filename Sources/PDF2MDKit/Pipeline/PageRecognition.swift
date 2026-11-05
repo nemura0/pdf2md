@@ -48,7 +48,9 @@ enum PageRecognition {
             result.didFail = record.didFail || needsOCR
             return result
         }
-        if needsOCR {
+        // Vision found nothing, but the text layer may hold a stamp or a caption worth keeping.
+        let hasOCRText = !recognized.lines.isEmpty || record.words.isEmpty
+        if needsOCR, hasOCRText {
             result.words = RecognizedWords.words(from: recognized.lines, pageSize: record.size)
             result.isOCR = true
             result.matchedWords = 0
@@ -58,7 +60,7 @@ enum PageRecognition {
             TableGrid.rows(
                 for: table,
                 pageSize: record.size,
-                words: needsOCR ? nil : record.words
+                words: needsOCR && hasOCRText ? nil : record.words
             ).map { TableRegion(rect: table.rect.denormalized(to: record.size), rows: $0) }
         }
         return result

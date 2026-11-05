@@ -71,7 +71,7 @@ public enum MathSpans {
         // Plain ASCII is never math by itself, and it's nearly all a document has.
         guard !character.isASCII, let scalar = character.unicodeScalars.first else { return false }
         if MathMapper.plainCharacter(for: scalar) != nil { return true }
-        let isEscapable = "×·°…′″¬±÷".contains(character)
+        let isEscapable = "×·°…′″¬±÷µ".contains(character)
         return MathMapper.hasCommand(character) && !isEscapable
     }
 

@@ -2,7 +2,7 @@ import CoreGraphics
 import PDFKit
 
 /// Renders a page upright, for OCR, table structure and crops.
-struct RenderedPage: @unchecked Sendable {
+struct RenderedPage {
     let image: CGImage
     /// Pixels per point.
     let scale: Double
@@ -15,7 +15,7 @@ enum PageRenderer {
 
     static func render(_ page: PDFPage, size: CGSize) -> RenderedPage? {
         let longest = max(size.width, size.height)
-        guard longest > 0 else { return nil }
+        guard longest > 0, size.width.isFinite, size.height.isFinite else { return nil }
         let scale = min(preferredScale, maximumSide / longest)
         let width = Int((size.width * scale).rounded(.up))
         let height = Int((size.height * scale).rounded(.up))

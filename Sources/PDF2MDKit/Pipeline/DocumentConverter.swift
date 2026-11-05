@@ -11,6 +11,8 @@ public struct ConversionStats: Sendable, Codable, Equatable {
     public var failedPages = 0
     public var matchedWords = 0
     public var unmatchedWords = 0
+    /// The first problem met on a page, for the log. Enough to start from.
+    public var firstNote: String?
 
     public init() {}
 
@@ -104,6 +106,7 @@ public struct DocumentConverter: Sendable {
             options: options,
             spool: spool
         )
+        try Task.checkCancellation()
         guard stats.failedPages < summary.pageCount else {
             throw ConversionFailure("no page could be read")
         }
@@ -192,19 +195,25 @@ public struct DocumentConverter: Sendable {
         while let index = await queue.take() {
             try Task.checkCancellation()
             var record: PageRecord
-            var didFail = false
             do {
                 record = try await process(index, worker: worker, context: context)
                 try spool.write(record)
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 // Bad values can't be encoded either. If this write fails too, the disk is the
                 // problem, and that is worth failing the file for.
-                record = PageRecord(index: index, width: 0, height: 0, didFail: true)
+                record = PageRecord(
+                    index: index,
+                    width: 0,
+                    height: 0,
+                    didFail: true,
+                    note: "page \(index + 1): \(error.localizedDescription)"
+                )
                 try spool.write(record)
-                didFail = true
-                stats.failedPages += 1
             }
-            if record.didFail, !didFail { stats.failedPages += 1 }
+            if record.didFail { stats.failedPages += 1 }
+            stats.firstNote = stats.firstNote ?? record.note
             stats.matchedWords += record.matchedWords
             stats.unmatchedWords += record.unmatchedWords
             if record.isOCR { stats.ocrPages += 1 }
@@ -221,12 +230,19 @@ public struct DocumentConverter: Sendable {
         context: Context
     ) async throws -> PageRecord {
         let prepared = try await worker.prepare(pageIndex: index)
-        var recognized: RecognizedPage?
-        if let image = prepared.image {
-            // A failure here is recorded on the page by `finish`.
-            recognized = try? await context.recognizer.recognize(image)
+        guard let image = prepared.image else {
+            return await worker.finish(prepared, recognized: nil, failure: nil)
         }
-        return await worker.finish(prepared, recognized: recognized)
+        do {
+            let recognized = try await context.recognizer.recognize(image)
+            return await worker.finish(prepared, recognized: recognized, failure: nil)
+        } catch is CancellationError {
+            _ = await worker.finish(prepared, recognized: nil, failure: nil)
+            throw CancellationError()
+        } catch {
+            let failure = "page \(index + 1): OCR failed: \(error.localizedDescription)"
+            return await worker.finish(prepared, recognized: nil, failure: failure)
+        }
     }
 
     // MARK: Emit
@@ -260,6 +276,28 @@ public struct DocumentConverter: Sendable {
         }
         try stream.write(block: "# " + InlineRenderer.escape(profile.title.text))
 
+        let images = try writePages(
+            pageCount: summary.pageCount,
+            profile: profile,
+            options: options,
+            spool: spool,
+            reserved: reserved,
+            to: &stream,
+            stats: &stats
+        )
+        try stream.close()
+        return images
+    }
+
+    private func writePages(
+        pageCount: Int,
+        profile: DocumentProfile,
+        options: ConvertOptions,
+        spool: PageSpool,
+        reserved: ReservedOutput,
+        to stream: inout MarkdownStream,
+        stats: inout ConversionStats
+    ) throws -> [(source: URL, name: String)] {
         var flow = PageFlow()
         let assembler = PageAssembler(profile: profile)
         var namer = FigureNamer(
@@ -267,7 +305,7 @@ public struct DocumentConverter: Sendable {
             cropDirectory: spool.cropDirectory,
             assetsName: options.includeImages ? reserved.assets?.lastPathComponent : nil
         )
-        for page in 0..<summary.pageCount {
+        for page in 0..<pageCount {
             try autoreleasepool {
                 let record = try spool.read(page: page)
                 let blocks = assembler.blocks(for: record, namer: &namer)
@@ -281,7 +319,6 @@ public struct DocumentConverter: Sendable {
             }
         }
         try flow.finish(to: &stream)
-        try stream.close()
         stats.images = namer.images.count
         return namer.images
     }
@@ -323,5 +360,6 @@ extension ConversionStats {
         failedPages += other.failedPages
         matchedWords += other.matchedWords
         unmatchedWords += other.unmatchedWords
+        firstNote = firstNote ?? other.firstNote
     }
 }

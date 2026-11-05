@@ -295,6 +295,12 @@ struct MathBlockTests {
         #expect(blocks == [.code(["α = 1"])])
     }
 
+    @Test("units stay text, and a bare < can't read as a tag")
+    func unitsAndTags() {
+        #expect(!MathSpans.isMath(word("5µm", x: 0, y: 0)))
+        #expect(MathMapper.latex(for: "x<y") == #"x\lt y"#)
+    }
+
     @Test("formulas are counted, and an escaped dollar isn't one")
     func count() {
         let blocks: [Block] = [

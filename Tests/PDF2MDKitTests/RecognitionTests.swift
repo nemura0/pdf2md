@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import PDFKit
+import Synchronization
 import Testing
 
 @testable import FixtureGen
@@ -13,6 +14,28 @@ private struct FailingRecognizer: DocumentRecognizing {
 
     func recognize(_ image: CGImage) async throws -> RecognizedPage {
         throw Failure()
+    }
+}
+
+/// Fails on the first call, then reads nothing.
+private final class PartlyFailingRecognizer: DocumentRecognizing, Sendable {
+    private let calls = Mutex(0)
+
+    func recognize(_ image: CGImage) async throws -> RecognizedPage {
+        let call = calls.withLock { value -> Int in
+            value += 1
+            return value
+        }
+        if call == 1 { throw FailingRecognizer.Failure() }
+        return RecognizedPage(
+            lines: [
+                RecognizedLine(
+                    text: "seen",
+                    rect: CGRect(x: 0.1, y: 0.1, width: 0.2, height: 0.02)
+                )
+            ],
+            tables: []
+        )
     }
 }
 
@@ -112,6 +135,20 @@ struct RecognitionTests {
         )
         #expect(report.stats.failedPages == 0)
         #expect(markdown.contains("Prueba 1"))
+    }
+
+    @Test("a Vision failure's reason reaches the report")
+    func failureReason() async throws {
+        let original = try fixture("book.pdf")
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+        let (_, report, _) = try await harness.convert(
+            original,
+            options: ConvertOptions(ocrMode: .always),
+            recognizer: PartlyFailingRecognizer()
+        )
+        #expect(report.stats.failedPages > 0)
+        #expect(report.stats.firstNote?.contains("OCR failed") == true)
     }
 
     @Test("born-digital tables become GFM tables, with exact text from the text layer")

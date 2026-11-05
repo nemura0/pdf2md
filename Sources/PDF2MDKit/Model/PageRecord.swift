@@ -117,6 +117,8 @@ public struct PageRecord: Sendable, Equatable {
     public var matchedWords: Int
     public var unmatchedWords: Int
     public var didFail: Bool
+    /// Why something on this page didn't work, for the log. The page may still have its text.
+    public var note: String?
 
     public init(
         index: Int,
@@ -130,7 +132,8 @@ public struct PageRecord: Sendable, Equatable {
         isOCR: Bool = false,
         matchedWords: Int = 0,
         unmatchedWords: Int = 0,
-        didFail: Bool = false
+        didFail: Bool = false,
+        note: String? = nil
     ) {
         self.index = index
         self.width = width
@@ -144,6 +147,7 @@ public struct PageRecord: Sendable, Equatable {
         self.matchedWords = matchedWords
         self.unmatchedWords = unmatchedWords
         self.didFail = didFail
+        self.note = note
     }
 
     /// Landscape pages are slides.
@@ -168,7 +172,7 @@ extension PageRecord: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case index, width, height, fonts, words, figures, tables, equations, rules, isOCR
-        case matchedWords, unmatchedWords, didFail
+        case matchedWords, unmatchedWords, didFail, note
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -205,6 +209,7 @@ extension PageRecord: Codable {
         try container.encode(matchedWords, forKey: .matchedWords)
         try container.encode(unmatchedWords, forKey: .unmatchedWords)
         try container.encode(didFail, forKey: .didFail)
+        try container.encodeIfPresent(note, forKey: .note)
     }
 
     public init(from decoder: any Decoder) throws {
@@ -232,5 +237,6 @@ extension PageRecord: Codable {
         self.matchedWords = try container.decode(Int.self, forKey: .matchedWords)
         self.unmatchedWords = try container.decode(Int.self, forKey: .unmatchedWords)
         self.didFail = try container.decode(Bool.self, forKey: .didFail)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
     }
 }

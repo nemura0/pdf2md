@@ -9,6 +9,8 @@ public enum TableGrid {
     /// A grid this empty is a layout Vision mistook for a table, and reads better as text.
     private static let minimumFilledShare = 0.4
     private static let containmentTolerance = 2.0
+    /// A guard on values from outside, far beyond any table a page can hold.
+    private static let maximumSide = 1000
 
     /// Rows of cell text, or nil if this isn't a credible table. `words` are in display space.
     /// Without words, cells keep the OCR text. Spanning cells fill their first position.
@@ -19,7 +21,10 @@ public enum TableGrid {
     ) -> [[String]]? {
         let rowCount = (table.cells.map(\.rows.upperBound).max() ?? -1) + 1
         let columnCount = (table.cells.map(\.columns.upperBound).max() ?? -1) + 1
-        guard rowCount >= minimumRows, columnCount >= minimumColumns else { return nil }
+        guard rowCount >= minimumRows, columnCount >= minimumColumns,
+            rowCount <= maximumSide, columnCount <= maximumSide,
+            table.cells.allSatisfy({ $0.rows.lowerBound >= 0 && $0.columns.lowerBound >= 0 })
+        else { return nil }
 
         var grid = [[String]](
             repeating: [String](repeating: "", count: columnCount),
@@ -27,9 +32,13 @@ public enum TableGrid {
         )
         let cellWords = words.map { fill(table, pageSize: pageSize, words: $0) }
         for (index, cell) in table.cells.enumerated() {
-            grid[cell.rows.lowerBound][cell.columns.lowerBound] =
-                cellWords.map { text(from: $0[index]) }
+            let text =
+                cellWords.map { self.text(from: $0[index]) }
                 ?? InlineRenderer.escape(TextNormalizer.normalize(cell.text))
+            // Two spans can start at one position, and neither should lose its text.
+            let existing = grid[cell.rows.lowerBound][cell.columns.lowerBound]
+            grid[cell.rows.lowerBound][cell.columns.lowerBound] =
+                existing.isEmpty || text.isEmpty ? existing + text : existing + " " + text
         }
         let filled = grid.joined().filter { !$0.isEmpty }.count
         guard Double(filled) >= Double(rowCount * columnCount) * minimumFilledShare else {
