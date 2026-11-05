@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Finds math in a line and renders it. Detection is by font and by character, not by meaning, so
 /// `a = b` in a text font stays text.
@@ -37,17 +38,38 @@ public enum MathSpans {
     }
 
     public static func isMath(_ word: Word) -> Bool {
-        if isMathFont(word.font.name) { return true }
-        if word.font.name.lowercased().contains(stixTextMarker), word.font.isItalic,
-            word.text.count <= maximumStixVariableLength
-        {
+        let family = family(ofFont: word.font.name)
+        if family.isMath { return true }
+        if family.isStix, word.font.isItalic, word.text.count <= maximumStixVariableLength {
             return true
         }
         return word.text.contains(where: isMathCharacter)
     }
 
+    private struct FontFamily {
+        var isMath: Bool
+        var isStix: Bool
+    }
+
+    /// Every word of the document passes here, and a document has only a handful of fonts.
+    /// Matching names each time took a 700-page book from 9.2 to 13.7 s.
+    private static let families = Mutex<[String: FontFamily]>([:])
+
+    private static func family(ofFont name: String) -> FontFamily {
+        families.withLock { known in
+            if let family = known[name] { return family }
+            let family = FontFamily(
+                isMath: isMathFont(name),
+                isStix: name.lowercased().contains(stixTextMarker)
+            )
+            known[name] = family
+            return family
+        }
+    }
+
     static func isMathCharacter(_ character: Character) -> Bool {
-        guard let scalar = character.unicodeScalars.first else { return false }
+        // Plain ASCII is never math by itself, and it's nearly all a document has.
+        guard !character.isASCII, let scalar = character.unicodeScalars.first else { return false }
         if MathMapper.plainCharacter(for: scalar) != nil { return true }
         let isEscapable = "×·°…′″¬±÷".contains(character)
         return MathMapper.hasCommand(character) && !isEscapable

@@ -71,6 +71,8 @@ run "text 700" 700 "$F/large-700.pdf"
 run "text 1400" 1400 "$F/bench-text-1400.pdf"
 echo "Other kinds of page:" | tee -a "$REPORT"
 run "slides 400" 400 "$F/bench-slides-400.pdf"
+run "scanned 300" 300 "$F/bench-scanned-300.pdf"
+run "scanned 700" 700 "$F/bench-scanned-700.pdf"
 echo "Three large files at once:" | tee -a "$REPORT"
 
 run "three at once" 2500 "$F/large-700.pdf" "$F/bench-text-1400.pdf" "$F/bench-slides-400.pdf"

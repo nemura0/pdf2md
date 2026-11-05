@@ -5,6 +5,31 @@ import Testing
 @testable import PDF2MDKit
 
 /// Runs the built `pdf2md` binary and checks its exit codes and output.
+private struct Workspace {
+    let root: URL
+    var home: URL { root.appendingPathComponent("home") }
+    var environment: [String: String] {
+        ["PDF2MD_HOME": home.path, "PDF2MD_DOWNLOADS": home.appendingPathComponent("dl").path]
+    }
+
+    init(fixtures: [Fixture]) throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pdf2md-cli-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for fixture in fixtures {
+            try fixture.data.write(to: root.appendingPathComponent(fixture.fileName))
+        }
+    }
+
+    func path(_ name: String) -> String { root.appendingPathComponent(name).path }
+
+    func names(in directory: URL? = nil) throws -> Set<String> {
+        Set(try FileManager.default.contentsOfDirectory(atPath: (directory ?? root).path))
+    }
+
+    func remove() { try? FileManager.default.removeItem(at: root) }
+}
+
 @Suite("Command line")
 struct CommandLineTests {
     @Test(
@@ -49,31 +74,6 @@ struct CommandLineTests {
 /// Runs whole conversions through the supervisor and its child processes.
 @Suite("Supervisor")
 struct SupervisorTests {
-    private struct Workspace {
-        let root: URL
-        var home: URL { root.appendingPathComponent("home") }
-        var environment: [String: String] {
-            ["PDF2MD_HOME": home.path, "PDF2MD_DOWNLOADS": home.appendingPathComponent("dl").path]
-        }
-
-        init(fixtures: [Fixture]) throws {
-            root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("pdf2md-cli-\(UUID().uuidString)", isDirectory: true)
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            for fixture in fixtures {
-                try fixture.data.write(to: root.appendingPathComponent(fixture.fileName))
-            }
-        }
-
-        func path(_ name: String) -> String { root.appendingPathComponent(name).path }
-
-        func names(in directory: URL? = nil) throws -> Set<String> {
-            Set(try FileManager.default.contentsOfDirectory(atPath: (directory ?? root).path))
-        }
-
-        func remove() { try? FileManager.default.removeItem(at: root) }
-    }
-
     private func fixtures(_ names: [String]) throws -> [Fixture] {
         try names.map(TestFixtures.named)
     }
@@ -211,5 +211,73 @@ enum TestProcess {
             stdout: String(decoding: out, as: UTF8.self),
             stderr: String(decoding: err, as: UTF8.self)
         )
+    }
+}
+
+/// A small deterministic generator, so a failing mutation can be replayed from its seed.
+private struct SplitMix64: RandomNumberGenerator {
+    var state: UInt64
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var value = state
+        value = (value ^ (value >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        value = (value ^ (value >> 27)) &* 0x94D0_49BB_1331_11EB
+        return value ^ (value >> 31)
+    }
+}
+
+@Suite("Fuzz smoke")
+struct FuzzSmokeTests {
+    private static let filesPerFixture = 12
+    private static let flippedBytes = 40
+
+    private func mutated(_ data: Data, seed: UInt64) -> Data {
+        var generator = SplitMix64(state: seed)
+        var bytes = [UInt8](data)
+        for _ in 0..<Self.flippedBytes {
+            bytes[Int.random(in: 0..<bytes.count, using: &generator)] = UInt8.random(
+                in: 0...255,
+                using: &generator
+            )
+        }
+        return Data(bytes)
+    }
+
+    @Test("byte-mutated PDFs end in a result or a clean failure, and never disturb the good file")
+    func mutatedFiles() throws {
+        let workspace = try Workspace(fixtures: [])
+        defer { workspace.remove() }
+        var names: [String] = []
+        for (index, name) in ["book.pdf", "pdftex-style.pdf", "slides.pdf"].enumerated() {
+            let source = try TestFixtures.named(name)
+            for copy in 0..<Self.filesPerFixture {
+                let fileName = "fuzz-\(index)-\(copy).pdf"
+                let seed = UInt64(index * 1000 + copy)
+                try mutated(source.data, seed: seed).write(
+                    to: workspace.root.appendingPathComponent(fileName)
+                )
+                names.append(fileName)
+            }
+        }
+        let good = try TestFixtures.named("book.pdf")
+        try good.data.write(to: workspace.root.appendingPathComponent("good.pdf"))
+
+        var environment = workspace.environment
+        environment["PDF2MD_WATCHDOG_SECONDS"] = "60"
+        let result = try TestProcess.runCLI(
+            (names + ["good.pdf"]).map(workspace.path),
+            environment: environment
+        )
+
+        #expect(result.status == 0 || result.status == 1)
+        #expect(try workspace.names().contains("good.md"))
+        let converted = try workspace.names().filter { $0.hasSuffix(".md") }.count
+        let failed = result.stderr.split(separator: "\n").filter { $0.hasPrefix("failed: ") }
+        #expect(converted + failed.count == names.count + 1)
+        let leftovers = try workspace.names().filter { $0.hasSuffix(PartialOutput.temporarySuffix) }
+        #expect(leftovers.isEmpty)
+        let jobs = workspace.home.appendingPathComponent("jobs")
+        #expect(try workspace.names(in: jobs).isEmpty)
     }
 }
