@@ -19,6 +19,7 @@ enum FixtureCatalog {
             try ScannedFixture.make(from: book),
             try EmojiNameFixture.make(),
             RawFixtures.pdfTeXStyle(),
+            LaTeXBookFixture.make(),
             RawFixtures.rotated(),
             RawFixtures.zeroPages(),
             RawFixtures.corrupt(),

@@ -21,8 +21,7 @@ public enum InlineRenderer {
         func flushCode() {
             guard !codeRun.isEmpty else { return }
             let code = TextNormalizer.normalize(joined(codeRun))
-            let fence = code.contains("`") ? "``" : "`"
-            output += fence + code + fence
+            output += codeSpan(code)
             codeRun = []
         }
 
@@ -38,6 +37,15 @@ public enum InlineRenderer {
         }
         flushCode()
         return output
+    }
+
+    /// CommonMark: the fence must differ from every backtick run inside, and a span that starts
+    /// or ends with a backtick is padded with one space, which readers strip.
+    private static func codeSpan(_ code: String) -> String {
+        let longestRun = code.split(whereSeparator: { $0 != "`" }).map(\.count).max() ?? 0
+        let fence = String(repeating: "`", count: longestRun + 1)
+        let padding = code.hasPrefix("`") || code.hasSuffix("`") ? " " : ""
+        return fence + padding + code + padding + fence
     }
 
     private static func isAllMonospace(_ words: [Word]) -> Bool {

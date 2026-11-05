@@ -37,6 +37,44 @@ struct LineBuilderTests {
         #expect(lines[0].size == 10)
     }
 
+    @Test("a small line number stays with its code, however deep the indentation")
+    func lineNumberStaysWithCode() throws {
+        let input = [
+            word("3", x: 15, y: 100, size: 5),
+            word("public", x: 61, y: 100, size: 8, font: .mono),
+            word("static", x: 94, y: 100, size: 8, font: .mono),
+        ]
+        let line = try #require(LineBuilder.lines(from: input).first)
+        #expect(LineBuilder.lines(from: input).count == 1)
+        #expect(line.isMonospace)
+        #expect(line.lineNumber?.text == "3")
+        #expect(line.size == 8)
+    }
+
+    @Test("one digit and one brace is still a line of code")
+    func lineNumberAndBrace() throws {
+        let input = [
+            word("2", x: 15, y: 100, size: 5),
+            word("{", x: 23, y: 100, size: 8, font: .mono),
+        ]
+        let line = try #require(LineBuilder.lines(from: input).first)
+        #expect(line.isMonospace)
+    }
+
+    @Test("a footnote marker against a URL isn't a line number")
+    func footnoteMarkerIsNotALineNumber() throws {
+        let marker = word("2", x: 72, y: 100, size: 5)
+        let url = word("https://example.org/", x: marker.rect.maxX + 0.5, y: 100, size: 8, font: .mono)
+        let line = try #require(LineBuilder.lines(from: [marker, url]).first)
+        #expect(line.lineNumber == nil)
+    }
+
+    @Test("a number at text size before prose isn't a line number")
+    func numberBeforeProse() throws {
+        let line = try #require(LineBuilder.lines(from: words("4 veces", y: 100)).first)
+        #expect(line.lineNumber == nil)
+    }
+
     @Test("a stacked numerator is not merged with the line below")
     func stackedLinesStaySeparate() {
         let input = words("numerator", x: 200, y: 92) + words("denominator", x: 200, y: 109)

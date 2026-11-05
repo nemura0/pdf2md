@@ -72,7 +72,8 @@ public struct DocumentProfile: Sendable, Equatable {
         bodySize: Double,
         repeatedKeys: Set<String>
     ) -> Bool {
-        guard MarginFilter.isInMargin(line.rect, pageHeight: pageHeight),
+        // A closing brace near the bottom repeats on many pages of a programming book.
+        guard !line.isMonospace, MarginFilter.isInMargin(line.rect, pageHeight: pageHeight),
             repeatedKeys.contains(MarginFilter.key(for: line.text))
         else { return false }
         let isNumberedHeading =
