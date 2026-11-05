@@ -2,7 +2,10 @@
 # End to end on the real install: Automator run, detach, notifications, cancel, crash and hang
 # isolation, global limits, reinstall. Automator strips the environment, so runs that need the
 # stub use a copy of the workflow with it inline. One run uses the installed workflow untouched,
-# which shows a real notification and adds a line to the real log.
+# which shows a real notification.
+#
+# This replaces the installed tool and runs the real uninstall, so it refuses to start while real
+# conversions are running, and it puts the real log back afterwards.
 source "$(dirname "$0")/lib.sh"
 require_xcode
 
@@ -13,6 +16,15 @@ PBS=/System/Library/CoreServices/pbs
 AUTOMATOR=/usr/bin/automator
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pdf2md-e2e.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+REAL_JOBS="$HOME/Library/Application Support/pdf2md/jobs"
+REAL_LOG="$HOME/Library/Logs/pdf2md/pdf2md.log"
+if [ -n "$(ls -A "$REAL_JOBS" 2>/dev/null)" ]; then
+    die "conversions are running. Let them finish or run pdf2md --cancel, then try again."
+fi
+SAVED_LOG="$WORK/real-log"
+[ -f "$REAL_LOG" ] && cp "$REAL_LOG" "$SAVED_LOG"
+# Each run has its own names, so nothing else on this Mac can match them.
+RUN_TAG="pdf2md-e2e-$$"
 
 passed=0
 failed=0
@@ -124,17 +136,18 @@ section "Cancel"
 B="$WORK/b"
 mkdir -p "$B/in"
 make_test_workflow "$B/home" "$B/notes.txt" "$B/test.workflow"
-cp "$FIXTURES/bench-text-1400.pdf" "$B/in/cancel-me-1.pdf"
-cp "$FIXTURES/large-700.pdf" "$B/in/cancel-me-2.pdf"
+cp "$FIXTURES/bench-text-1400.pdf" "$B/in/$RUN_TAG-cancel-1.pdf"
+cp "$FIXTURES/large-700.pdf" "$B/in/$RUN_TAG-cancel-2.pdf"
 find "$B/in" -name '*.pdf' -print > "$B/list.txt"
-"$AUTOMATOR" -i - "$B/test.workflow" < "$B/list.txt" > /dev/null 2>&1
+"$AUTOMATOR" -i - "$B/test.workflow" < "$B/list.txt" > /dev/null 2>&1 || true
 PDF2MD_HOME="$B/home" "$BIN" --cancel > "$B/cancel.txt"
 check "cancel reports the job" contains "$B/cancel.txt" "Cancelled 1"
 check "no partial markdown" bash -c "! ls '$B/in' | grep -q '\.md$'"
 check "no assets left" bash -c "! ls '$B/in' | grep -q '_assets$'"
 check "no temp files left" bash -c "! ls -A '$B/in' | grep -q 'pdf2md-tmp'"
 check "job directory is gone" is_empty_dir "$B/home/jobs"
-check "no process left" no_process_matches "__convert-child.*cancel-me"
+check "no process left" no_process_matches "__convert-child.*$RUN_TAG-cancel"
+check "the end notification says cancelled" wait_for_text "$B/notes.txt" "Cancelled. " 15
 
 section "A crash costs one file"
 C="$WORK/c"
@@ -183,7 +196,7 @@ wait "$supervisor" 2>/dev/null || true
 /bin/sleep 1
 if [ -n "$child" ] && kill -0 "$child" 2>/dev/null; then child_alive=yes; else child_alive=no; fi
 check "its child exits" test "$child_alive" = no
-env "PDF2MD_HOME=$E/home" "$BIN" "$E/book.pdf" > /dev/null 2>&1
+env "PDF2MD_HOME=$E/home" "$BIN" "$E/book.pdf" > /dev/null 2>&1 || true
 check "the stale job is swept" is_empty_dir "$E/home/jobs"
 check "its placeholder is gone" missing "$E/orphaned.md"
 check "the new run converted" is_nonempty_file "$E/book.md"
@@ -192,23 +205,24 @@ section "Limits are global across runs"
 F="$WORK/f"
 mkdir -p "$F/one" "$F/two"
 for index in 1 2 3; do
-    cp "$FIXTURES/bench-text-350.pdf" "$F/one/limit-a$index.pdf"
-    cp "$FIXTURES/bench-text-350.pdf" "$F/two/limit-b$index.pdf"
+    cp "$FIXTURES/bench-text-350.pdf" "$F/one/$RUN_TAG-limit-a$index.pdf"
+    cp "$FIXTURES/bench-text-350.pdf" "$F/two/$RUN_TAG-limit-b$index.pdf"
 done
-env "PDF2MD_HOME=$F/home" "$BIN" --detach "$F/one/"*.pdf
-env "PDF2MD_HOME=$F/home" "$BIN" --detach "$F/two/"*.pdf
+env "PDF2MD_HOME=$F/home" "$BIN" --detach "$F/one/"*.pdf || true
+env "PDF2MD_HOME=$F/home" "$BIN" --detach "$F/two/"*.pdf || true
 peak=0
-while pgrep -f "pdf2md --ready-fd.*$F" > /dev/null; do
+give_up=$((SECONDS + 300))
+while pgrep -f "pdf2md --ready-fd.*$RUN_TAG" > /dev/null && [ "$SECONDS" -lt "$give_up" ]; do
     # Children's JSON arguments escape every slash, so this matches on the file name only.
-    count="$( (pgrep -f "__convert-child.*limit-" || true) | wc -l | tr -d ' ')"
+    count="$( (pgrep -f "__convert-child.*$RUN_TAG-limit-" || true) | wc -l | tr -d ' ')"
     [ "$count" -gt "$peak" ] && peak="$count"
     /bin/sleep 0.1
 done
 check "at most 3 files in flight across both runs (peak $peak)" test "$peak" -le 3
 check "they overlapped (peak $peak)" test "$peak" -ge 2
 for index in 1 2 3; do
-    check "first run, file $index" is_nonempty_file "$F/one/limit-a$index.md"
-    check "second run, file $index" is_nonempty_file "$F/two/limit-b$index.md"
+    check "first run, file $index" is_nonempty_file "$F/one/$RUN_TAG-limit-a$index.md"
+    check "second run, file $index" is_nonempty_file "$F/two/$RUN_TAG-limit-b$index.md"
 done
 
 section "Output names and fallback"
@@ -236,13 +250,25 @@ check "and says so" contains "$G/fallback.txt" "not writable"
 section "The installed workflow, untouched"
 H="$WORK/h"
 mkdir -p "$H"
-cp "$FIXTURES/book.pdf" "$H/real.pdf"
-printf '%s\n' "$H/real.pdf" > "$H/list.txt"
+cp "$FIXTURES/book.pdf" "$H/$RUN_TAG.pdf"
+printf '%s\n' "$H/$RUN_TAG.pdf" > "$H/list.txt"
 real_status=0
 "$AUTOMATOR" -i - "$WORKFLOW" < "$H/list.txt" > /dev/null 2>&1 || real_status=$?
 check "automator exits with 0" test "$real_status" -eq 0
-check "the real log records it" wait_for_text "$HOME/Library/Logs/pdf2md/pdf2md.log" "file=\"real.pdf\"" 120
-check "the output is next to the PDF" is_nonempty_file "$H/real.md"
+check "the real log records it" wait_for_text "$REAL_LOG" "file=\"$RUN_TAG.pdf\"" 120
+check "the output is next to the PDF" is_nonempty_file "$H/$RUN_TAG.md"
+
+section "The real service runner"
+S="$WORK/s"
+mkdir -p "$S"
+cp "$FIXTURES/book.pdf" "$S/$RUN_TAG-service.pdf"
+xcrun --sdk macosx swiftc -O -o "$S/perform-service" "$REPO_ROOT/scripts/perform-service.swift"
+service_status=0
+"$S/perform-service" "Convert to Markdown" "$S/$RUN_TAG-service.pdf" || service_status=$?
+check "macOS accepts the service request" test "$service_status" -eq 0
+check "the service runner starts a job that finishes" \
+    wait_for_text "$REAL_LOG" "file=\"$RUN_TAG-service.pdf\"" 120
+check "the output is next to the PDF" is_nonempty_file "$S/$RUN_TAG-service.md"
 
 section "Uninstall and reinstall"
 bash "$REPO_ROOT/scripts/uninstall.sh" > /dev/null
@@ -254,6 +280,10 @@ check "tool data removed" missing "$HOME/Library/Application Support/pdf2md"
 check "logs removed" missing "$HOME/Library/Logs/pdf2md"
 bash "$REPO_ROOT/scripts/install.sh" > /dev/null
 check "reinstalled" test -x "$BIN"
+if [ -f "$SAVED_LOG" ]; then
+    mkdir -p "$(dirname "$REAL_LOG")"
+    cp "$SAVED_LOG" "$REAL_LOG"
+fi
 
 printf '\ne2e: %d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]

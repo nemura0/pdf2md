@@ -47,43 +47,68 @@ public enum ProcessSpawner {
     }
 
     /// Starts this executable again in its own session, so it outlives the Quick Action, with
-    /// nothing inherited but a pipe at `readyDescriptor`. Returns once that pipe closes, which the
-    /// new process does when its job is registered, so an immediate `--cancel` can't miss it.
-    public static func spawnDetached(arguments: [String], readyDescriptor: Int32) throws {
+    /// nothing inherited but a pipe at `readyDescriptor`. The new process writes a byte there when
+    /// its job is registered, so an immediate `--cancel` can't miss it. If it dies first, this
+    /// throws. If it's merely slow, as on a stuck volume, this returns after a while and it goes on.
+    public static func spawnDetached(
+        executable: String? = nil,
+        arguments: [String],
+        readyDescriptor: Int32
+    ) throws {
         let ready = try makePipe()
+        defer { close(ready.read) }
         var actions = try makeActions()
         defer { posix_spawn_file_actions_destroy(&actions) }
+        // First, since with stdio closed in this process the pipe can be descriptor 0, 1 or 2.
+        posix_spawn_file_actions_adddup2(&actions, ready.write, readyDescriptor)
         posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
         posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
         posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
-        posix_spawn_file_actions_adddup2(&actions, ready.write, readyDescriptor)
 
         do {
             _ = try spawn(
+                executable: executable,
                 arguments: arguments,
                 actions: &actions,
                 flags: Int32(POSIX_SPAWN_SETSID)
             )
         } catch {
-            close(ready.read)
             close(ready.write)
             throw error
         }
         close(ready.write)
-        var byte: UInt8 = 0
-        while true {
-            let count = read(ready.read, &byte, 1)
-            if count >= 0 || errno != EINTR { break }
+        guard try waitForReadiness(on: ready.read) else {
+            throw ConversionFailure("the background job couldn't start")
         }
-        close(ready.read)
     }
 
+    /// False if the pipe closed without a byte, which means the process died.
+    private static func waitForReadiness(on descriptor: Int32) throws -> Bool {
+        var request = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+        while true {
+            let count = poll(&request, 1, detachTimeoutMilliseconds)
+            if count == 0 { return true }
+            if count > 0 { break }
+            if errno != EINTR { throw ConversionFailure("couldn't wait for the background job") }
+        }
+        var byte: UInt8 = 0
+        while true {
+            let count = read(descriptor, &byte, 1)
+            if count >= 0 { return count == 1 }
+            if errno != EINTR { return false }
+        }
+    }
+
+    /// Finder is waiting on the Quick Action, and registering normally takes milliseconds.
+    private static let detachTimeoutMilliseconds: Int32 = 30_000
+
     private static func spawn(
+        executable: String? = nil,
         arguments: [String],
         actions: inout posix_spawn_file_actions_t?,
         flags: Int32
     ) throws -> pid_t {
-        let executable = try executablePath()
+        let executable = try executable ?? executablePath()
         var attributes: posix_spawnattr_t?
         posix_spawnattr_init(&attributes)
         defer { posix_spawnattr_destroy(&attributes) }

@@ -189,11 +189,25 @@ public final class JobHandle {
         for file in files {
             let url = job.appendingPathComponent(file)
             guard let text = try? String(contentsOf: url, encoding: .utf8),
-                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1
+                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1,
+                isTool(pid)
             else { continue }
             kill(pid, number)
         }
     }
+
+    /// A recorded pid can outlive its process and come back as someone else's.
+    static func isTool(_ pid: pid_t) -> Bool {
+        var path = [UInt8](repeating: 0, count: pathBufferSize)
+        let length = proc_pidpath(pid, &path, UInt32(path.count))
+        guard length > 0 else { return false }
+        return String(decoding: path.prefix(Int(length)), as: UTF8.self)
+            .hasSuffix("/" + executableName)
+    }
+
+    private static let executableName = "pdf2md"
+    /// `PROC_PIDPATHINFO_MAXSIZE`, which Swift doesn't import because it's a computed macro.
+    private static let pathBufferSize = 4096
 
     /// True once the job's processes are gone and its directory is cleaned.
     private static func waitForRelease(of job: URL, paths: RuntimePaths, seconds: Double) -> Bool {

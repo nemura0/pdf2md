@@ -426,6 +426,77 @@ struct OutputWriterTests {
         #expect(!FileManager.default.fileExists(atPath: image.path))
     }
 
+    @Test("a commit that fails part way leaves the overwritten output and its images whole")
+    func overwriteFailure() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let assets = directory.appendingPathComponent("book_assets")
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+        for name in ["p0001-01.png", "p0002-01.png"] {
+            try Data("old".utf8).write(to: assets.appendingPathComponent(name))
+        }
+        let markdown = directory.appendingPathComponent("book.md")
+        try Data("old".utf8).write(to: markdown)
+        let temporary = directory.appendingPathComponent(".tmp")
+        try Data("new".utf8).write(to: temporary)
+        let source = directory.appendingPathComponent("new.png")
+        try Data("new".utf8).write(to: source)
+        let output = ReservedOutput(
+            markdown: markdown,
+            assets: assets,
+            temporary: temporary,
+            didFallBack: false,
+            isOverwrite: true,
+            ownsAssets: false
+        )
+
+        #expect(throws: (any Error).self) {
+            try OutputWriter.commit(
+                output,
+                images: [
+                    (source, "p0001-01.png"),
+                    (directory.appendingPathComponent("missing.png"), "p0002-01.png"),
+                ]
+            )
+        }
+
+        #expect(try String(contentsOf: markdown, encoding: .utf8) == "old")
+        let left = try FileManager.default.contentsOfDirectory(atPath: assets.path).sorted()
+        #expect(left == ["p0001-01.png", "p0002-01.png"])
+        let image = assets.appendingPathComponent("p0001-01.png")
+        #expect(try String(contentsOf: image, encoding: .utf8) == "old")
+    }
+
+    @Test("a commit that succeeds replaces the images and leaves no staged files")
+    func overwriteImages() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let assets = directory.appendingPathComponent("book_assets")
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+        let image = assets.appendingPathComponent("p0001-01.png")
+        try Data("old".utf8).write(to: image)
+        let temporary = directory.appendingPathComponent(".tmp")
+        try Data("new".utf8).write(to: temporary)
+        let source = directory.appendingPathComponent("new.png")
+        try Data("new".utf8).write(to: source)
+        let output = ReservedOutput(
+            markdown: directory.appendingPathComponent("book.md"),
+            assets: assets,
+            temporary: temporary,
+            didFallBack: false,
+            isOverwrite: true,
+            ownsAssets: false
+        )
+
+        try OutputWriter.commit(output, images: [(source, "p0001-01.png")])
+
+        #expect(try String(contentsOf: image, encoding: .utf8) == "new")
+        let left = try FileManager.default.contentsOfDirectory(atPath: assets.path)
+        #expect(left == ["p0001-01.png"])
+    }
+
     @Test("--overwrite leaves the original intact until the commit")
     func overwrite() throws {
         let directory = try makeDirectory()

@@ -93,7 +93,11 @@ struct PDF2MDCommand: AsyncParsableCommand {
                 isVerbose: verbose,
                 showsProgress: true,
                 onRegistered: { [readyFd, files] in
-                    if let readyFd { close(readyFd) }
+                    if let readyFd {
+                        var byte: UInt8 = 1
+                        _ = write(readyFd, &byte, 1)
+                        close(readyFd)
+                    }
                     notifier?.send(NotificationText.started(fileCount: files.count))
                 }
             )

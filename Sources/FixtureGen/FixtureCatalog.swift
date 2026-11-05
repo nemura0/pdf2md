@@ -56,6 +56,10 @@ enum FixtureCatalog {
             [try ScannedFixture.makeLong(name: "bench-scanned-700.pdf", pages: 700)],
             to: directory
         )
+        try write(
+            [try ScannedFixture.makeLong(name: "bench-scanned-1400.pdf", pages: 1400)],
+            to: directory
+        )
     }
 
     static func write(_ fixtures: [Fixture], to directory: URL) throws {

@@ -232,7 +232,7 @@ public enum Supervisor {
         let progress = run.progress
         let monitor = ChildMonitor(
             child: child,
-            beforeReap: { run.unregister(child: child.pid) }
+            beforeReap: { run.unregister(child: child.pid, index: index) }
         ) { event in
             if case .page(let done, let total) = event {
                 progress.page(file: name, done: done, total: total)
@@ -327,7 +327,10 @@ private final class RunContext: Sendable {
         }
     }
 
-    func unregister(child: pid_t) {
+    /// Before the reap, while the pid can't yet belong to anything else. `--cancel` must not find
+    /// it after that.
+    func unregister(child: pid_t, index: Int) {
+        unlink(pidFiles[index].path)
         _ = signals.withLock { $0.children.remove(child) }
     }
 

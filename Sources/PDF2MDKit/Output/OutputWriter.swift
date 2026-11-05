@@ -70,16 +70,47 @@ public enum OutputWriter {
             if !manager.fileExists(atPath: assets.path), !images.isEmpty {
                 try manager.createDirectory(at: assets, withIntermediateDirectories: true)
             }
-            for image in images {
-                let target = assets.appendingPathComponent(image.name)
-                try? manager.removeItem(at: target)
-                try manager.moveItem(at: image.source, to: target)
-            }
+            try move(images, to: assets, replacing: output.isOverwrite)
         }
         guard rename(output.temporary.path, output.markdown.path) == 0 else {
             throw ConversionFailure("couldn't finish \(output.markdown.lastPathComponent)")
         }
         if let assets = output.assets, output.ownsAssets { rmdir(assets.path) }
+    }
+
+    /// Replacing images staged first, so a failure part way leaves the previous output whole: its
+    /// Markdown is still in place, and it needs every image it links to (A10).
+    private static func move(
+        _ images: [(source: URL, name: String)],
+        to assets: URL,
+        replacing: Bool
+    ) throws {
+        let manager = FileManager.default
+        guard replacing else {
+            for image in images {
+                try manager.moveItem(
+                    at: image.source,
+                    to: assets.appendingPathComponent(image.name)
+                )
+            }
+            return
+        }
+        var staged: [(temporary: URL, target: URL)] = []
+        do {
+            for image in images {
+                let temporary = assets.appendingPathComponent(
+                    ".\(UUID().uuidString)\(PartialOutput.temporarySuffix)"
+                )
+                try manager.moveItem(at: image.source, to: temporary)
+                staged.append((temporary, assets.appendingPathComponent(image.name)))
+            }
+        } catch {
+            for file in staged { try? manager.removeItem(at: file.temporary) }
+            throw error
+        }
+        for file in staged where rename(file.temporary.path, file.target.path) != 0 {
+            throw ConversionFailure("couldn't update \(file.target.lastPathComponent)")
+        }
     }
 
     // MARK: Reservation

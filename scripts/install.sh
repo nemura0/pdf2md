@@ -14,9 +14,11 @@ built="$(swift build -c release --show-bin-path)/pdf2md"
 
 mkdir -p "$BIN_DIR" "$SERVICES_DIR"
 # Copy then rename: overwriting a binary in place makes the kernel kill running jobs.
+tmp=""
+workflow_tmp=""
+trap 'rm -f "$tmp"; rm -rf "$workflow_tmp"' EXIT
 tmp="$(mktemp "$BIN_DIR/.pdf2md.XXXXXX")"
 workflow_tmp="$(mktemp -d "$SERVICES_DIR/.pdf2md.XXXXXX")"
-trap 'rm -f "$tmp"; rm -rf "$workflow_tmp"' EXIT
 cp "$built" "$tmp"
 chmod 755 "$tmp"
 
@@ -39,6 +41,9 @@ escaped_path="$BIN_PATH"
 escaped_path="${escaped_path//\\/\\\\}"
 escaped_path="${escaped_path//\"/\\\"}"
 escaped_path="${escaped_path//\$/\\\$}"
+escaped_path="${escaped_path//\`/\\\`}"
+# Newer bash would otherwise read the `&` of `&amp;` as the matched text.
+shopt -u patsub_replacement 2>/dev/null || true
 escaped_path="${escaped_path//&/&amp;}"
 escaped_path="${escaped_path//</&lt;}"
 escaped_path="${escaped_path//>/&gt;}"

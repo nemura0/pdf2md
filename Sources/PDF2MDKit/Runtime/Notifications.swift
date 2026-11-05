@@ -18,7 +18,8 @@ public enum NotificationText {
 
     /// The headline, then each failure with its reason, as many as fit. The log gets the rest.
     public static func finished(_ summary: RunSummary) -> String {
-        var lines = [summary.headline]
+        let wasCancelled = summary.outcomes.contains { $0.error == cancelledReason }
+        var lines = [wasCancelled ? "Cancelled. \(summary.headline)" : summary.headline]
         let fallBacks = summary.outcomes.filter(\.didFallBack).count
         if fallBacks > 0 { lines.append("Folder not writable, saved to Downloads.") }
 
@@ -48,8 +49,9 @@ public enum NotificationText {
 public struct OsascriptNotifier: Notifying {
     private static let defaultExecutable = "/usr/bin/osascript"
     private static let title = "Convert to Markdown"
-    /// A stuck notification must never hold up a conversion's end.
-    private static let timeoutSeconds = 10.0
+    /// A stuck notification can't hold anything up for long. Under `--cancel`'s grace period, or
+    /// the start notification could get a healthy supervisor killed.
+    private static let timeoutSeconds = 5.0
 
     private let executable: String
 
@@ -79,6 +81,10 @@ public struct OsascriptNotifier: Notifying {
         while process.isRunning, Date() < deadline {
             Thread.sleep(forTimeInterval: 0.02)
         }
-        if process.isRunning { process.terminate() }
+        if process.isRunning {
+            // SIGKILL, because ignored signals survive exec and a supervisor ignores SIGTERM.
+            kill(process.processIdentifier, SIGKILL)
+            process.waitUntilExit()
+        }
     }
 }

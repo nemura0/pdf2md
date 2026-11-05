@@ -14,7 +14,7 @@ trap 'rm -rf "$BENCH_HOME"' EXIT
 
 swift build -c release --product pdf2md 2>&1 | tail -1
 BIN="$(swift build -c release --product pdf2md --show-bin-path)/pdf2md"
-[ -f "$REPO_ROOT/Fixtures/bench-text-1400.pdf" ] || bash "$REPO_ROOT/scripts/fixtures.sh" --bench
+[ -f "$REPO_ROOT/Fixtures/bench-scanned-1400.pdf" ] || bash "$REPO_ROOT/scripts/fixtures.sh" --bench
 
 mkdir -p "$RESULTS"
 REPORT="$RESULTS/$(date +%Y-%m-%d-%H%M%S).txt"
@@ -73,6 +73,7 @@ echo "Other kinds of page:" | tee -a "$REPORT"
 run "slides 400" 400 "$F/bench-slides-400.pdf"
 run "scanned 300" 300 "$F/bench-scanned-300.pdf"
 run "scanned 700" 700 "$F/bench-scanned-700.pdf"
+run "scanned 1400" 1400 "$F/bench-scanned-1400.pdf"
 echo "Three large files at once:" | tee -a "$REPORT"
 
 run "three at once" 2500 "$F/large-700.pdf" "$F/bench-text-1400.pdf" "$F/bench-slides-400.pdf"

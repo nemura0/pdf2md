@@ -325,8 +325,40 @@ struct NotificationTextTests {
         let text = NotificationText.finished(
             summary([moved, outcome("b.pdf", error: "cancelled")])
         )
+        #expect(text.hasPrefix("Cancelled. Converted 1 of 2"))
         #expect(text.contains("saved to Downloads"))
         #expect(!text.contains("b.pdf"))
+    }
+}
+
+@Suite("Detach handshake and pid checks")
+struct DetachHandshakeTests {
+    @Test("a process that dies before registering is reported, not taken for success")
+    func diedEarly() {
+        #expect(throws: ConversionFailure.self) {
+            try ProcessSpawner.spawnDetached(
+                executable: "/usr/bin/true",
+                arguments: [],
+                readyDescriptor: 3
+            )
+        }
+    }
+
+    @Test("a process that signals it's ready returns at once, even if it keeps running")
+    func signalled() throws {
+        let started = Date()
+        try ProcessSpawner.spawnDetached(
+            executable: "/bin/sh",
+            arguments: ["-c", "printf x >&3; exec 3>&-; sleep 3"],
+            readyDescriptor: 3
+        )
+        #expect(Date().timeIntervalSince(started) < 2)
+    }
+
+    @Test("a recorded pid only counts if it's still this tool")
+    func pidCheck() {
+        #expect(!JobHandle.isTool(getpid()))
+        #expect(!JobHandle.isTool(-1))
     }
 }
 

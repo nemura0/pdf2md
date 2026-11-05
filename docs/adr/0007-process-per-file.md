@@ -53,8 +53,9 @@ online-only files are exempt, since those can legitimately take a while.
 `POSIX_SPAWN_CLOEXEC_DEFAULT` is required: an inherited descriptor would keep a `flock`
 alive after its owner is gone.
 
-A new process costs little here: Vision's fresh-process start measured 0.44 s, and the
-37 s model load happens once per machine, not once per process.
+A new process costs little here: Vision's fresh-process start measured 0.44 s. The model
+load of about 40 s happens once per binary, so once after each install, not once per
+process.
 
 ## Consequences
 
@@ -76,3 +77,13 @@ in-process runner is possible behind `ProcessSpawning`.
 - A fuzz run and real samples showing that hard crashes never occur, combined with a
   concrete cost from this design. Crash isolation is not free, but neither is losing a
   batch.
+
+## Measured while building it
+
+- Cancelling sends SIGTERM to the supervisor, which has handlers, cleans up and reports. The
+  supervisor sends SIGKILL to its children, because a child kept converting after a SIGTERM
+  despite `POSIX_SPAWN_SETSIGDEF`. The cause is unexplained. Children hold nothing worth saving,
+  since all they have written is in their manifest, so this costs nothing.
+- `--cancel` escalates to SIGKILL only for a supervisor that doesn't release its lock in 10 s. Pid
+  files are removed before each child is reaped, and a recorded pid is checked against the
+  executable's name before it is signalled, because pids get reused.
