@@ -92,7 +92,7 @@ actor PageWorker {
             index: pageIndex,
             width: geometry.size.width,
             height: geometry.size.height,
-            words: text.words,
+            words: text.words + VectorBullets.words(marks: trace.marks, text: text.words),
             figures: [],
             rules: trace.rules,
             matchedWords: text.matched,

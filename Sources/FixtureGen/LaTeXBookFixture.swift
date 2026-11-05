@@ -8,6 +8,11 @@ enum LaTeXBookFixture {
     /// Latin Modern's bounding boxes, in thousandths of the font size.
     private static let sansBox = "-420 -281 1431 1167"
     private static let monoBox = "-448 -320 1000 1000"
+    /// PDFKit sizes an unembedded font's rects from these. On the code font they reach the line
+    /// above, as Latin Modern's do. On the text font they can't: with fake metrics that tall,
+    /// PDFKit merges two lines of body text into one, which no real book showed.
+    private static let tallMetrics = (ascent: 1000, descent: -300)
+    private static let compactMetrics = (ascent: 850, descent: -230)
     private static let pageHeight = 680.0
     private static let textX = 34.0
     private static let bodyLeading = 11.955
@@ -15,21 +20,29 @@ enum LaTeXBookFixture {
     /// `listings` sets leading spaces wider than its glyphs, which are 4.62 wide at this size.
     private static let codeIndentCell = 4.83
 
-    private static func font(_ name: String, flags: Int, box: String, width: Int) -> String {
+    private static func font(
+        _ name: String,
+        flags: Int,
+        box: String,
+        width: Int,
+        metrics: (ascent: Int, descent: Int) = compactMetrics
+    ) -> String {
         let widths = Array(repeating: String(width), count: 224).joined(separator: " ")
         return """
             << /Type /Font /Subtype /Type1 /BaseFont /\(name) /FirstChar 32 /LastChar 255 \
             /Widths [\(widths)] /Encoding /WinAnsiEncoding /FontDescriptor << \
             /Type /FontDescriptor /FontName /\(name) /Flags \(flags) /FontBBox [\(box)] \
-            /ItalicAngle 0 /Ascent 1000 /Descent -300 /CapHeight 700 /StemV 80 >> >>
+            /ItalicAngle 0 /Ascent \(metrics.ascent) /Descent \(metrics.descent) /CapHeight 700 \
+            /StemV 80 >> >>
             """
     }
 
     private static func fonts() -> String {
         """
         /Sans \(font("ABCDEF+LMSans10-Regular", flags: 32, box: sansBox, width: 450)) \
+        /Bold \(font("ABCDEF+LMSans10-Bold", flags: 262176, box: sansBox, width: 500)) \
         /Tiny \(font("ABCDEF+LMSans8-Regular", flags: 32, box: sansBox, width: 530)) \
-        /Mono \(font("ABCDEF+LMMono8-Regular", flags: 33, box: monoBox, width: 578))
+        /Mono \(font("ABCDEF+LMMono8-Regular", flags: 33, box: monoBox, width: 578, metrics: tallMetrics))
         """
     }
 
@@ -52,6 +65,33 @@ enum LaTeXBookFixture {
         lines.enumerated().map { offset, line in
             "BT /Sans 9.963 Tf \(textX) \(top - Double(offset) * bodyLeading) Td (\(escape(line))) Tj ET\n"
         }.joined()
+    }
+
+    /// Bullets drawn as small filled squares, with no glyph in the text layer.
+    private static func bullets(_ items: [String], top: Double) -> String {
+        items.enumerated().map { offset, item in
+            let y = top - Double(offset) * bodyLeading * 1.6
+            return """
+                q 1 0 0 1 \(textX + 15.7) \(y + 0.9) cm 0 0 3.096 3.096 re f Q
+                BT /Sans 9.963 Tf \(textX + 24.9) \(y) Td (\(escape(item))) Tj ET
+
+                """
+        }.joined()
+    }
+
+    /// A `description` list: a bold term running into text that hangs under an indent.
+    private static func description(term: String, lines: [String], top: Double) -> String {
+        let textStart = textX + Double(term.count) * 4.98 + 5
+        var content = """
+            BT /Bold 9.963 Tf \(textX) \(top) Td (\(escape(term))) Tj ET
+            BT /Sans 9.963 Tf \(textStart) \(top) Td (\(escape(lines[0]))) Tj ET
+
+            """
+        for (offset, line) in lines.dropFirst().enumerated() {
+            let y = top - Double(offset + 1) * bodyLeading
+            content += "BT /Sans 9.963 Tf \(textX + 24.9) \(y) Td (\(escape(line))) Tj ET\n"
+        }
+        return content
     }
 
     private static func escape(_ text: String) -> String {
@@ -132,6 +172,38 @@ enum LaTeXBookFixture {
         addPage(
             body(["Segunda figura."], top: 620) + draw("B"),
             xObjects: "/B \(secondImage)",
+            writer: &writer
+        )
+
+        addPage(
+            bullets(["Manuales de desarrollo", "Diagramas de diseno"], top: 620)
+                + description(
+                    term: "Diagnostico",
+                    lines: [
+                        "En este punto simplemente diagnosticamos la situacion, para tener una idea",
+                        "de cual es el problema que requiere un sistema de software.",
+                    ],
+                    top: 560
+                )
+                + description(
+                    term: "Factibilidad",
+                    lines: [
+                        "Es necesario evaluar si el sistema de software es realmente la solucion total.",
+                        "Se revisa si es factible de implementar.",
+                    ],
+                    top: 520
+                )
+                + body(
+                    [
+                        "Una copia de esta licencia se puede encontrar en la pagina web en",
+                    ],
+                    top: 470
+                )
+                + """
+                BT /Mono 9.963 Tf 340 470 Td (http://creative.) Tj ET
+                BT /Mono 9.963 Tf \(textX) \(470 - bodyLeading) Td (org/licenses/) Tj ET
+
+                """,
             writer: &writer
         )
 

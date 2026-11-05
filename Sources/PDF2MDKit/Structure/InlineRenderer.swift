@@ -14,6 +14,22 @@ public enum InlineRenderer {
         return math
     }
 
+    /// A line opening a paragraph or a list item. A bold term running into plain text is how
+    /// `description` lists and many definitions are set, so that bold carries structure.
+    public static func renderOpening(_ words: [Word], in line: TextLine) -> String {
+        let lead = words.prefix { $0.font.isBold && !$0.font.isMonospace }
+        guard !lead.isEmpty, lead.count < words.count else { return render(words, in: line) }
+        let rest = Array(words.dropFirst(lead.count))
+        let separator = rest[0].isGlued ? "" : " "
+        let body = isAllMonospace(rest) ? code(rest) : render(rest, in: line)
+        return "**" + render(Array(lead), in: line) + "**" + separator + body
+    }
+
+    /// Words that are all code, as a code span.
+    public static func code(_ words: [Word]) -> String {
+        codeSpan(TextNormalizer.normalize(joined(words)))
+    }
+
     public static func render(_ words: [Word]) -> String {
         var output = ""
         var codeRun: [Word] = []
