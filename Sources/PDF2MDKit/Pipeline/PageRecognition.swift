@@ -14,7 +14,8 @@ enum PageRecognition {
         for record: PageRecord,
         rules: [RuleSegment],
         figures: [FigureCandidate],
-        mode: OCRMode
+        mode: OCRMode,
+        isBlank: Bool = false
     ) -> Plan {
         let text = record.words.map(\.text).joined(separator: " ")
         let coverage = FigureFilter.imageCoverage(figures, pageSize: record.size)
@@ -22,7 +23,11 @@ enum PageRecognition {
         switch mode {
         case .always: needsOCR = true
         case .never: needsOCR = false
-        case .auto: needsOCR = TextLayerQuality.needsOCR(text: text, pageImageCoverage: coverage)
+        // Vision can't read a page with nothing drawn on it, and the first use of Vision after an
+        // install takes about 40 s. A book's blank pages were all it needed it for.
+        case .auto:
+            needsOCR =
+                !isBlank && TextLayerQuality.needsOCR(text: text, pageImageCoverage: coverage)
         }
         // With no text and no OCR, a table's cells would have nothing to fill them.
         let needsTables =
@@ -56,6 +61,8 @@ enum PageRecognition {
             result.matchedWords = 0
             result.unmatchedWords = 0
         }
+        // Tables read from the page's own rules are exact, and Vision wasn't asked about them.
+        guard record.tables.isEmpty else { return result }
         result.tables = recognized.tables.compactMap { table in
             TableGrid.rows(
                 for: table,

@@ -76,10 +76,17 @@ public enum TableGrid {
         )
     }
 
-    private static func text(from words: [Word]) -> String {
+    /// A cell's lines as one text, with a word broken at a line's end made whole.
+    static func text(from words: [Word]) -> String {
         LineBuilder.lines(from: words)
             .map { InlineRenderer.render(line: $0) }
-            .joined(separator: " ")
+            .reduce("") { text, line in
+                guard !text.isEmpty else { return line }
+                if text.hasSuffix("-"), line.first?.isLowercase == true {
+                    return String(text.dropLast()) + line
+                }
+                return text + " " + line
+            }
     }
 }
 

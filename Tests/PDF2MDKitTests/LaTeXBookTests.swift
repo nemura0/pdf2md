@@ -42,21 +42,21 @@ struct LaTeXBookTests {
     func vectorBullets() async throws {
         let (markdown, _, _, harness) = try await convert()
         defer { harness.cleanUp() }
-        #expect(markdown.contains("- Manuales de desarrollo\n- Diagramas de diseno\n"), "\(markdown)")
+        #expect(markdown.contains("- Manuales de desarrollo\n- Diagramas de diseno\n"))
     }
 
     @Test("a description list keeps each term with its whole paragraph")
     func descriptionList() async throws {
         let (markdown, _, _, harness) = try await convert()
         defer { harness.cleanUp() }
-        #expect(markdown.contains(
+        let first =
             "**Diagnostico** En este punto simplemente diagnosticamos la situacion, para tener "
-                + "una idea de cual es el problema que requiere un sistema de software.\n"
-        ), "\(markdown)")
-        #expect(markdown.contains(
+            + "una idea de cual es el problema que requiere un sistema de software.\n"
+        let second =
             "**Factibilidad** Es necesario evaluar si el sistema de software es realmente la "
-                + "solucion total. Se revisa si es factible de implementar.\n"
-        ), "\(markdown)")
+            + "solucion total. Se revisa si es factible de implementar.\n"
+        #expect(markdown.contains(first), "\(markdown)")
+        #expect(markdown.contains(second), "\(markdown)")
     }
 
     @Test("a URL wrapped at the end of a paragraph stays in it")

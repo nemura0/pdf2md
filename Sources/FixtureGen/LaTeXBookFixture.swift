@@ -195,15 +195,12 @@ enum LaTeXBookFixture {
                 )
                 + body(
                     [
-                        "Una copia de esta licencia se puede encontrar en la pagina web en",
+                        "Una copia de esta licencia se puede encontrar en la pagina web en"
                     ],
                     top: 470
                 )
-                + """
-                BT /Mono 9.963 Tf 340 470 Td (http://creative.) Tj ET
-                BT /Mono 9.963 Tf \(textX) \(470 - bodyLeading) Td (org/licenses/) Tj ET
-
-                """,
+                + "BT /Mono 9.963 Tf 340 470 Td (http://creative.) Tj ET\n"
+                + "BT /Mono 9.963 Tf \(textX) \(470 - bodyLeading) Td (org/licenses/) Tj ET\n",
             writer: &writer
         )
 

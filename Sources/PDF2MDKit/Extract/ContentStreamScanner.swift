@@ -21,6 +21,10 @@ struct PageTrace {
     var rules: [RuleSegment] = []
     /// Small filled squares, in display space. Often they're a list's bullets.
     var marks: [CGRect] = []
+    var hasPaintedPaths = false
+
+    /// Nothing drawn at all, the kind of page LaTeX leaves before a chapter.
+    var isBlank: Bool { runs.isEmpty && figures.isEmpty && !hasPaintedPaths }
 }
 
 /// Walks a page's content stream, tracking the CTM and text state. It reads font facts, image
@@ -496,6 +500,7 @@ final class ScanState {
 
     func paintPath(strokes: Bool, fills: Bool) {
         defer { clearPath() }
+        if strokes || fills { trace.hasPaintedPaths = true }
         guard trace.rules.count < Self.maximumRules else { return }
         if strokes {
             for (start, end) in pendingSegments { addRule(start, end) }
