@@ -10,9 +10,12 @@ enum SymbolGlyphs {
     private static let unknown = "■"
     private static let space = 32
     private static let heightShare = 0.8
+    /// Each run is compared with every word on the page. A real table has a few dozen.
+    private static let maximumRuns = 2000
 
     static func words(runs: [TextRun], text: [Word]) -> [Word] {
-        runs.filter { !$0.symbolCodes.isEmpty && $0.isHorizontal }.compactMap { run in
+        runs.filter { !$0.symbolCodes.isEmpty && $0.isHorizontal }.prefix(maximumRuns).compactMap {
+            run in
             let codes = run.symbolCodes.filter { $0 != space }
             let rect = CGRect(
                 x: run.originX,

@@ -315,6 +315,7 @@ public struct DocumentConverter: Sendable {
                 try flow.write(
                     blocks,
                     pageMarker: options.includePageMarkers ? "<!-- page \(page + 1) -->" : nil,
+                    isLost: record.didFail,
                     to: &stream
                 )
             }

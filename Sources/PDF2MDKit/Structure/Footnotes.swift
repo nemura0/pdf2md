@@ -161,6 +161,8 @@ enum Footnotes {
         return word.text.dropFirst(marker.count).allSatisfy(\.isPunctuation)
     }
 
+    private static let trailingPunctuation: Set<Character> = [",", ".", ";", ":", ")", "!", "?"]
+
     /// The marker's first appearance in the text.
     private static func link(marker: String, label: String, in lines: inout [TextLine]) -> Bool {
         let order = lines.indices.sorted { lines[$0].baseline < lines[$1].baseline }
@@ -175,6 +177,11 @@ enum Footnotes {
             words[position].text = String(words[position].text.dropFirst(marker.count))
             words[position].footnote = label
             words[position].isGlued = true
+            // The comma after a marker can be a word of its own, and it stays with the reference.
+            let next = position + 1
+            if next < words.count, words[next].text.allSatisfy(trailingPunctuation.contains) {
+                words[next].isGlued = true
+            }
             lines[index] = TextLine(words: words)
             return true
         }

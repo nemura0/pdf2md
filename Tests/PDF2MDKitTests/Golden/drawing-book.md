@@ -21,11 +21,11 @@ Una clase se dibuja como una caja con sus atributos:
 ![Figure](drawing-book_assets/p0002-01.png)
 
 ```text
-                                                      Una venta
-        Persona
--rut:String                      compra               Celular
-+getRut():String                              -modelo:String
-                                    registrado
+                                                                     Una venta
+                       Persona
+              -rut:String                      compra                Celular
+prod          +getRut():String                              -modelo:String
+                                                   registrado
 ```
 
 Despues del diagrama sigue el texto normal de la pagina.
@@ -39,9 +39,13 @@ Este parrafo tiene codigo sombreado en varias de sus lineas pero no es un dibujo
 
 Un entorno de desarrollo[^p2-1], es la herramienta que usaremos.
 
+El siguiente es el compilador[^p2-2], que traduce el codigo.
+
 Este otro parrafo empieza en esta pagina y no termina en ella porque sigue en la siguiente, donde se acaba la frase.
 
 [^p2-1]: IDE: entorno integrado de desarrollo
+
+[^p2-2]: Se llama javac
 
 <!-- page 3 -->
 

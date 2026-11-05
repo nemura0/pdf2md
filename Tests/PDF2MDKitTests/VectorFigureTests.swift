@@ -357,3 +357,151 @@ struct FramedCaptionTests {
         #expect(found.minY > shaded.minY)
     }
 }
+
+@Suite("Vector figures on hostile pages")
+struct HostileVectorFigureTests {
+    private let page = CGSize(width: 600, height: 800)
+
+    private func find(shapes: [CGRect], lines: [TextLine] = []) -> [CGRect] {
+        VectorFigures.find(
+            shapes: shapes,
+            rules: [],
+            lines: lines,
+            tables: [],
+            figures: [],
+            pageSize: page
+        )
+    }
+
+    /// `CGRect.null` holds infinities, which the spool can't encode, and the page would be lost.
+    @Test("a drawing entirely off the page isn't a drawing")
+    func offThePage() {
+        let shapes = (0..<3).map { CGRect(x: 700 + Double($0) * 10, y: 400, width: 60, height: 40) }
+        #expect(find(shapes: shapes).isEmpty)
+    }
+
+    @Test("a drawing partly off the page is clipped to it")
+    func partlyOff() throws {
+        let shapes = (0..<3).map { CGRect(x: 560 + Double($0) * 10, y: 400, width: 60, height: 40) }
+        let found = try #require(find(shapes: shapes).first)
+        #expect(found.maxX <= page.width)
+    }
+
+    /// Every drawing against every small cluster against every line took 11.5 s at about this size
+    /// in a release build, with the page's slot held all along.
+    @Test("a page of many small clusters doesn't take long")
+    func manyClusters() {
+        // A grid wide enough apart that no two of these join: 5-point marks on a 12-point pitch.
+        let cell = { (index: Int) in
+            CGRect(x: Double(index % 49) * 12, y: 60 + Double(index / 49) * 12, width: 5, height: 5)
+        }
+        let drawings = (0..<600).flatMap { [cell($0), cell($0), cell($0)] }
+        let parts = (600..<2600).map(cell)
+        let lines = (0..<500).map { index in
+            line("a", x: Double(index % 49) * 12, y: 60 + Double(index / 49) * 12)
+        }
+        let start = ContinuousClock.now
+        _ = find(shapes: drawings + parts, lines: lines)
+        #expect(ContinuousClock.now - start < .seconds(20))
+    }
+
+    @Test("a huge shape in a digest doesn't stop the conversion")
+    func hugeShapeInDigest() {
+        let rect = CGRect(x: 0, y: 0, width: 1e30, height: 1e30)
+        let shape = CGRect(x: 1e29, y: 1e29, width: 1e29, height: 1e29)
+        #expect(!VectorFigures.digest(of: rect, shapes: [shape], words: []).isEmpty)
+    }
+}
+
+@Suite("Diagram labels on hostile pages")
+struct HostileDiagramLabelTests {
+    @Test("a word absurdly far away doesn't stop the conversion")
+    func farAway() throws {
+        let lines = DiagramLabels.lines(from: [
+            line("a", x: 0, y: 100), line("b", x: 1e30, y: 100),
+        ])
+        let row = try #require(lines.first)
+        #expect(row.hasSuffix("b"))
+        #expect(row.count < 200)
+    }
+}
+
+@Suite("Vector figures with parts and labels beside them")
+struct DrawingPartsTests {
+    private let page = CGSize(width: 482, height: 680)
+    /// A box, its outline and its compartment: a drawing from x 200 to 330, y 300 to 380.
+    private let box = [
+        CGRect(x: 200, y: 300, width: 130, height: 80),
+        CGRect(x: 200, y: 300, width: 130, height: 80),
+        CGRect(x: 200, y: 320, width: 130, height: 10),
+    ]
+
+    private func find(extra: [CGRect] = [], lines: [TextLine] = []) -> [CGRect] {
+        VectorFigures.find(
+            shapes: box + extra,
+            rules: [],
+            lines: lines,
+            tables: [],
+            figures: [],
+            pageSize: page
+        )
+    }
+
+    @Test("an arrow stopping short of a drawing belongs to it")
+    func arrow() throws {
+        let found = try #require(find(extra: [CGRect(x: 150, y: 330, width: 38, height: 14)]).first)
+        #expect(found.minX <= 150)
+    }
+
+    @Test("a straight arrow level with a drawing belongs to it")
+    func straightArrow() throws {
+        let found = try #require(find(extra: [CGRect(x: 150, y: 340, width: 38, height: 0)]).first)
+        #expect(found.minX <= 150)
+    }
+
+    @Test("a lone rule close to a drawing stays out, since it can be a footnote's")
+    func loneRule() throws {
+        let found = try #require(find(extra: [CGRect(x: 100, y: 392, width: 170, height: 0)]).first)
+        #expect(found.maxY < 392)
+    }
+
+    @Test("a short label beside a drawing joins it, however far it sticks out")
+    func labelToTheRight() throws {
+        let label = line("acelerar [vel<max] / vel++", x: 334, y: 330)
+        let found = try #require(find(lines: [label]).first)
+        #expect(found.maxX >= label.rect.maxX)
+    }
+
+    @Test("a label partly over a drawing's left side joins it")
+    func labelOverTheLeft() throws {
+        let label = line("instancia1", x: 170, y: 330)
+        let found = try #require(find(lines: [label]).first)
+        #expect(found.minX <= 170)
+    }
+
+    @Test("the last line of a paragraph beside a drawing stays out")
+    func sentenceBeside() throws {
+        let found = try #require(find(lines: [line("de otra manera.", x: 334, y: 330)]).first)
+        #expect(found.maxX < 340)
+    }
+
+    /// A real book's short listing beside a shaded box of output reads as a label otherwise.
+    @Test("a line of a listing beside a drawing stays out")
+    func listingBeside() throws {
+        let found = try #require(find(lines: [line("Este", x: 334, y: 330, font: .mono)]).first)
+        #expect(found.maxX < 340)
+    }
+
+    @Test("a line with more words than a label stays out")
+    func longLineBeside() throws {
+        let text = "una linea de un parrafo con muchas palabras que sigue"
+        let found = try #require(find(lines: [line(text, x: 334, y: 330)]).first)
+        #expect(found.maxX < 340)
+    }
+
+    @Test("a short line below a drawing stays out")
+    func lineBelow() throws {
+        let found = try #require(find(lines: [line("Por ejemplo", x: 30, y: 420)]).first)
+        #expect(found.maxY < 400)
+    }
+}

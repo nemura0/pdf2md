@@ -13,9 +13,9 @@ public enum VectorFigures {
     /// inside it, since TikZ can draw a class box and its compartments as one path.
     private static let minimumShapes = 3
     private static let frameMargin = 2.0
-    /// A captioned box beside a drawing is part of it, without touching any of its shapes. A real
-    /// book's sit 6 and 13 points from the drawing.
-    private static let captionFrameReach = 16.0
+    /// A captioned box or an arrow can belong to a drawing without touching any of its shapes. A
+    /// real book's sit 6 to 13 points from the drawing.
+    private static let partReach = 16.0
     private static let minimumWidth = 40.0
     private static let minimumHeight = 14.0
     /// Bars in a page's header and footer. The top of a real book's text starts at 7%.
@@ -32,6 +32,10 @@ public enum VectorFigures {
     private static let nearbyLabelGap = 8.0
     private static let nearbyLabelOverhang = 12.0
     private static let maximumNearbyLabelWords = 8
+    /// A line beside a drawing has to be shorter, since text wrapped around it sits there too.
+    private static let maximumBesideLabelWords = 4
+    /// Labels don't end like this, and the last line of a sentence does.
+    private static let sentenceEndings: Set<Character> = [".", ",", ";", ":", "?", "!"]
     private static let cropPadding = 2.0
     /// The middle of a letter, above the baseline, in font sizes. See `RuledTables`.
     private static let letterHeight = 0.7
@@ -63,29 +67,41 @@ public enum VectorFigures {
             cluster.count >= minimumShapes || hasCompartments(bounds(cluster), rules: rules)
         }
         let drawings = clusters.filter { isLarge($0) && isFigure($0) }
-        let captions = clusters.filter { !isLarge($0) && isFigure($0) }.map(bounds)
+        // Each part looks at the lines once. Doing that per drawing took 11.5 s in a release build
+        // on a page of 600 drawings, 3,000 parts and 500 lines, with the page's slot held.
+        let parts = clusters.filter { !isLarge($0) && isFigure($0) }.map(bounds).map { part in
+            DrawingPart(rect: part, holdsText: holdsText(part, lines: lines))
+        }
         return
             drawings
             .compactMap { cluster -> CGRect? in
-                let framed = addingCaptionFrames(captions, to: bounds(cluster), lines: lines)
-                let area = addingNearbyLabels(to: framed, lines: lines)
+                let joined = addingParts(parts, to: bounds(cluster))
+                // Off the page this is `CGRect.null`, with no size. Its infinities can't be
+                // spooled, and the page's whole text would be lost with it.
+                let area = addingNearbyLabels(to: joined, lines: lines).intersection(page)
                 guard area.width >= minimumWidth, area.height >= minimumHeight else { return nil }
                 return area.insetBy(dx: -cropPadding, dy: -cropPadding).intersection(page)
             }
             .sorted { ($0.minY, $0.minX) < ($1.minY, $1.minX) }
     }
 
-    private static func addingCaptionFrames(
-        _ frames: [CGRect],
-        to bounds: CGRect,
-        lines: [TextLine]
-    ) -> CGRect {
-        let limit = bounds.insetBy(dx: -captionFrameReach, dy: -captionFrameReach)
-        return frames.reduce(bounds) { area, frame in
-            let holdsText = lines.contains { line in
-                frame.contains(CGPoint(x: line.rect.midX, y: line.rect.midY))
-            }
-            return holdsText && limit.intersects(frame) ? area.union(frame) : area
+    private struct DrawingPart {
+        var rect: CGRect
+        var holdsText: Bool
+    }
+
+    private static func holdsText(_ rect: CGRect, lines: [TextLine]) -> Bool {
+        lines.contains { rect.contains(CGPoint(x: $0.rect.midX, y: $0.rect.midY)) }
+    }
+
+    /// Above or below a drawing, only a box with words in it joins: a lone line there can be a
+    /// footnote's rule. Level with the drawing, a line or a curve is an arrow.
+    private static func addingParts(_ parts: [DrawingPart], to bounds: CGRect) -> CGRect {
+        let limit = bounds.insetBy(dx: -partReach, dy: -partReach)
+        return parts.reduce(bounds) { area, part in
+            let isLevel = part.rect.minY >= bounds.minY && part.rect.maxY <= bounds.maxY
+            let isPart = limit.intersects(part.rect) && (part.holdsText || isLevel)
+            return isPart ? area.union(part.rect) : area
         }
     }
 
@@ -94,7 +110,8 @@ public enum VectorFigures {
     public static func digest(of rect: CGRect, shapes: [CGRect], words: [Word]) -> String {
         var hasher = SHA256()
         let add = { (value: CGFloat) in
-            var rounded = Int64((Double(value) * digestPrecision).rounded())
+            // A shape can be any size, and a plain conversion traps past Int64's range.
+            var rounded = Int64(exactly: (Double(value) * digestPrecision).rounded()) ?? .max
             withUnsafeBytes(of: &rounded) { hasher.update(bufferPointer: $0) }
         }
         for shape in shapes where rect.contains(CGPoint(x: shape.midX, y: shape.midY)) {
@@ -176,8 +193,20 @@ public enum VectorFigures {
                 line.words.count <= maximumNearbyLabelWords && letters.minX >= limit.minX
                 && letters.maxX <= limit.maxX && letters.maxY >= limit.minY
                 && letters.minY <= limit.maxY
-            return isLabel ? area.union(letters) : area
+            let joins = isLabel || isBesideLabel(line, letters: letters, limit: limit)
+            return joins ? area.union(letters) : area
         }
+    }
+
+    /// A short line level with a drawing and reaching it from one side names something in it,
+    /// however far it sticks out: `instancia1`, `frenar[vel>0]`. In monospace, it's more likely a
+    /// listing set next to a shaded box of output.
+    private static func isBesideLabel(_ line: TextLine, letters: CGRect, limit: CGRect) -> Bool {
+        guard line.words.count <= maximumBesideLabelWords, !line.isMonospace,
+            let last = line.text.last, !sentenceEndings.contains(last)
+        else { return false }
+        return letters.minY >= limit.minY && letters.maxY <= limit.maxY
+            && letters.minX <= limit.maxX && letters.maxX >= limit.minX
     }
 
     /// Word boxes follow the font's bounding box and can reach the next line, so they can't say
@@ -242,7 +271,7 @@ enum DiagramLabels {
         return rows(of: lines).map { row in
             row.sorted { $0.rect.minX < $1.rect.minX }.reduce(into: "") { text, line in
                 let place = cell > 0 ? (Double(line.rect.minX - left) / cell).rounded() : 0
-                let column = min(Int(place), maximumColumn)
+                let column = min(Int(exactly: place) ?? maximumColumn, maximumColumn)
                 let padding = text.isEmpty ? column : max(1, column - text.count)
                 text += String(repeating: " ", count: padding) + TextNormalizer.normalize(line.text)
             }

@@ -56,12 +56,7 @@ enum ObjectPlacement {
     static func segments(lines: [TextLine], objects: [PageObject]) -> [PageSegment] {
         let sorted = objects.sorted { ($0.rect.minY, $0.rect.minX) < ($1.rect.minY, $1.rect.minX) }
         var pending = [Int: [PageObject]]()
-        for object in sorted {
-            let slot =
-                lines.firstIndex { line in
-                    line.rect.midY > object.rect.minY
-                        && line.rect.minX < object.rect.maxX && line.rect.maxX > object.rect.minX
-                } ?? lines.count
+        for (object, slot) in zip(sorted, slots(of: sorted, among: lines)) {
             pending[slot, default: []].append(object)
         }
 
@@ -77,5 +72,35 @@ enum ObjectPlacement {
         }
         if !run.isEmpty { segments.append(.lines(run)) }
         return segments
+    }
+
+    /// Objects side by side go together, or a heading that only reaches one of them would land
+    /// between them. In two columns, lines above an object come in between, and each keeps its own.
+    private static func slots(of sorted: [PageObject], among lines: [TextLine]) -> [Int] {
+        let own = sorted.map { object in
+            lines.firstIndex { line in
+                line.rect.midY > object.rect.minY
+                    && line.rect.minX < object.rect.maxX && line.rect.maxX > object.rect.minX
+            } ?? lines.count
+        }
+        var slots = own
+        var start = 0
+        while start < sorted.count {
+            var bottom = sorted[start].rect.maxY
+            var end = start + 1
+            while end < sorted.count, sorted[end].rect.minY < bottom {
+                bottom = max(bottom, sorted[end].rect.maxY)
+                end += 1
+            }
+            let first = own[start..<end].min() ?? lines.count
+            for index in start..<end where own[index] > first {
+                let isBelowIt = lines[first..<own[index]].allSatisfy {
+                    $0.rect.midY > sorted[index].rect.maxY
+                }
+                if isBelowIt { slots[index] = first }
+            }
+            start = end
+        }
+        return slots
     }
 }

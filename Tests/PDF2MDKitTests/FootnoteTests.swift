@@ -70,6 +70,22 @@ struct FootnoteTests {
         #expect(InlineRenderer.render(line: page.lines[0]) == "Se instala el JRE[^p22-3].")
     }
 
+    @Test("punctuation set apart from the marker stays attached to the reference")
+    func commaAfterMarker() {
+        let marked = TextLine(
+            words: words("Los entornos de desarrollo", x: 30, y: 300)
+                + [
+                    word("6", x: 150, y: 296.4, size: 7),
+                    word(",", x: 156, y: 300),
+                    word("que", x: 160, y: 300),
+                ]
+        )
+        let page = separate([marked, noteLine("6", "IDE", y: 600)])
+        #expect(
+            InlineRenderer.render(line: page.lines[0]) == "Los entornos de desarrollo[^p22-6], que"
+        )
+    }
+
     @Test("a listing's gutter further left than the text doesn't hide the rule")
     func gutterLeftOfText() {
         let gutter = TextLine(
