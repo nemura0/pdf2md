@@ -25,14 +25,15 @@ enum ObjectPlacement {
         let covering = objects.filter(\.coversText)
         guard !covering.isEmpty else { return lines }
         return lines.filter { line in
-            let center = CGPoint(x: line.rect.midX, y: line.rect.midY)
-            return !covering.contains { object in
-                line.size <= object.largestCoveredSize
-                    && object.rect
-                        .insetBy(dx: -containmentTolerance, dy: -containmentTolerance)
-                        .contains(center)
+            !covering.contains { object in
+                line.size <= object.largestCoveredSize && isCovered(line, by: object.rect)
             }
         }
+    }
+
+    static func isCovered(_ line: TextLine, by rect: CGRect) -> Bool {
+        rect.insetBy(dx: -containmentTolerance, dy: -containmentTolerance)
+            .contains(CGPoint(x: line.rect.midX, y: line.rect.midY))
     }
 
     /// Later objects that overlap an earlier one hold the same words, as when a ruled table of

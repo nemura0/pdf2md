@@ -135,6 +135,25 @@ struct PageFlowTests {
         )
     }
 
+    @Test("a list item split by a page break is joined, and the marker follows the list")
+    func listItemJoined() throws {
+        let items = [
+            ListItem(depth: 0, marker: "-", text: "One."),
+            ListItem(depth: 0, marker: "-", text: "It starts"),
+        ]
+        let text = try flow([[.list(items)], [.paragraph("and ends."), .paragraph("Next.")]])
+        #expect(
+            text == "<!-- page 1 -->\n\n- One.\n- It starts and ends.\n\n<!-- page 2 -->\n\nNext.\n"
+        )
+    }
+
+    @Test("a finished list item isn't joined to the next page's text")
+    func listItemFinished() throws {
+        let items = [ListItem(depth: 0, marker: "-", text: "One.")]
+        let text = try flow([[.list(items)], [.paragraph("next one")]])
+        #expect(text == "<!-- page 1 -->\n\n- One.\n\n<!-- page 2 -->\n\nnext one\n")
+    }
+
     @Test("a finished sentence or a capital starts a new paragraph on the new page")
     func notJoined() throws {
         let text = try flow([[.paragraph("Done.")], [.paragraph("next one")]])

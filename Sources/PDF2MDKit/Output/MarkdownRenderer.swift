@@ -11,13 +11,17 @@ public enum MarkdownRenderer {
         case .list(let items):
             renderList(items)
         case .code(let lines):
-            renderCode(lines)
+            renderFence(lines)
+        case .labels(let lines):
+            renderFence(lines, info: "text")
         case .displayMath(let latex):
             "$$\n\(latex)\n$$"
         case .table(let rows):
             renderTable(rows)
         case .figure(let path):
             "![Figure](\(percentEncoded(path)))"
+        case .footnote(let label, let text):
+            label.map { "[^\($0)]: \(text)" } ?? text
         }
     }
 
@@ -36,10 +40,10 @@ public enum MarkdownRenderer {
         return lines.joined(separator: "\n")
     }
 
-    private static func renderCode(_ lines: [String]) -> String {
+    private static func renderFence(_ lines: [String], info: String = "") -> String {
         let longestRun = lines.map(longestBacktickRun).max() ?? 0
         let fence = String(repeating: "`", count: max(3, longestRun + 1))
-        return ([fence] + lines + [fence]).joined(separator: "\n")
+        return ([fence + info] + lines + [fence]).joined(separator: "\n")
     }
 
     private static func longestBacktickRun(in line: String) -> Int {

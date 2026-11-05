@@ -92,7 +92,8 @@ actor PageWorker {
             index: pageIndex,
             width: geometry.size.width,
             height: geometry.size.height,
-            words: text.words + VectorBullets.words(marks: trace.marks, text: text.words),
+            words: text.words + VectorBullets.words(marks: trace.marks, text: text.words)
+                + SymbolGlyphs.words(runs: trace.runs, text: text.words),
             figures: [],
             rules: trace.rules,
             matchedWords: text.matched,
@@ -105,26 +106,41 @@ actor PageWorker {
             mode: options.ocrMode,
             isBlank: trace.isBlank
         )
-        // A text layer that needs OCR is what a ruled table would have to fill its cells from.
-        if !plan.needsOCR {
-            record.tables = RuledTables.find(rules: trace.rules, words: text.words)
-            plan.needsTables = plan.needsTables && record.tables.isEmpty
-        }
-        let figures =
+        let images =
             options.includeImages
             ? FigureFilter.kept(trace.figures, pageSize: geometry.size, isOCR: plan.needsOCR)
             : []
-        // OCR text is too rough to tell a stack of formulas from anything else.
+        // OCR text is too rough to tell a stack of formulas from anything else, and a ruled table
+        // would have to fill its cells from it.
+        let lines = LineBuilder.lines(from: text.words)
         let stacked =
-            plan.needsOCR
+            plan.needsOCR ? [] : StackedEquations.find(in: lines, rules: trace.rules)
+        if !plan.needsOCR {
+            record.tables = RuledTables.find(rules: trace.rules, words: record.words)
+        }
+        let drawings =
+            plan.needsOCR || record.isSlide
             ? []
-            : StackedEquations.find(
-                in: LineBuilder.lines(from: text.words),
-                rules: trace.rules
-            )
+            : self.drawings(in: trace, words: text.words, lines: lines, record: record, stacked)
+        let found = record.tables.map(\.rect) + drawings.map(\.rect)
+        plan.needsTables = PageRecognition.needsTables(
+            for: record,
+            // Two listings side by side line up like columns, and Vision reads them as a table.
+            lines: lines.filter { line in
+                line.lineNumber == nil
+                    && !found.contains {
+                        $0.contains(CGPoint(x: line.rect.midX, y: line.rect.midY))
+                    }
+            },
+            rules: trace.rules.filter { rule in
+                !found.contains { $0.contains(CGPoint(x: rule.startX, y: rule.startY)) }
+            }
+        )
+        let figures = images + drawings
         let needsRender =
-            plan.usesVision || figures.contains { cropNames[$0.digest] == nil }
-            || (options.includeImages && !stacked.isEmpty)
+            plan.usesVision
+            || (options.includeImages
+                && (figures.contains { cropNames[$0.digest] == nil } || !stacked.isEmpty))
         let rendered = needsRender ? PageRenderer.render(page, size: geometry.size) : nil
         record.figures = cropped(figures, from: rendered, note: &record.note)
         record.equations = cropped(
@@ -138,6 +154,30 @@ actor PageWorker {
             image: plan.usesVision ? rendered?.image : nil,
             needsOCR: plan.needsOCR
         )
+    }
+
+    /// Slides are left out: they frame ordinary bullets in boxes, and their lists matter more.
+    private func drawings(
+        in trace: PageTrace,
+        words: [Word],
+        lines: [TextLine],
+        record: PageRecord,
+        _ stacked: [StackedEquation]
+    ) -> [FigureCandidate] {
+        VectorFigures.find(
+            shapes: trace.shapes,
+            rules: trace.rules,
+            lines: lines,
+            tables: record.tables.map(\.rect),
+            figures: trace.figures.map(\.rect) + stacked.map(\.rect),
+            pageSize: record.size
+        ).map { rect in
+            FigureCandidate(
+                digest: VectorFigures.digest(of: rect, shapes: trace.shapes, words: words),
+                rect: rect,
+                isDrawing: true
+            )
+        }
     }
 
     /// One image is cropped once by this worker, however often it appears. A logo repeated on

@@ -23,6 +23,9 @@ enum PDFTextExtractor {
     private static let syntheticCharWidth = 6.0
     private static let syntheticMargin = 72.0
     private static let baselineDescentShare = 0.2
+    /// Half a font size is about the middle of any one character.
+    private static let characterSpotShare = 0.5
+    private static let endTolerance = 1.5
 
     static func extract(
         page: PDFPage,
@@ -176,8 +179,8 @@ enum PDFTextExtractor {
             )
             location = composed.upperBound
             guard let selection = page.selection(for: absolute) else { continue }
-            let rect = geometry.convert(selection.bounds(for: page))
-            let run = runs.last { $0.originX <= rect.midX } ?? runs[0]
+            let measured = geometry.convert(selection.bounds(for: page))
+            let (run, rect) = place(measured, among: runs)
             let piece = text.substring(with: composed)
             if let last = pieces.last, isSameStyle(last.run, run) {
                 pieces[pieces.count - 1].text += piece
@@ -189,6 +192,22 @@ enum PDFTextExtractor {
         return pieces.enumerated().map { offset, piece in
             word(piece.text, rect: piece.rect, run: piece.run, isGlued: offset > 0)
         }
+    }
+
+    /// A character's run, and its real extent. PDFKit gives glyphs with no text to the character
+    /// before them: on a real book's table, the `c` of `public` measured 360 points wide, over the
+    /// check marks in the columns beside it. So its start says where it is, not its middle.
+    static func place(_ rect: CGRect, among runs: [TextRun]) -> (run: TextRun, rect: CGRect) {
+        let size = runs.map(\.size).max() ?? 0
+        let spot = min(rect.midX, rect.minX + size * characterSpotShare)
+        let run = runs.last { $0.originX <= spot } ?? runs[0]
+        guard run.hasReliableEnd, rect.maxX > run.endX + endTolerance, run.endX > rect.minX else {
+            return (run, rect)
+        }
+        return (
+            run,
+            CGRect(x: rect.minX, y: rect.minY, width: run.endX - rect.minX, height: rect.height)
+        )
     }
 
     private static func isSameStyle(_ first: TextRun, _ second: TextRun) -> Bool {

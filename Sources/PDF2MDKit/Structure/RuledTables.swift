@@ -11,8 +11,11 @@ public enum RuledTables {
     private static let minimumRows = 2
     /// A band this thin holds no text. It's the space inside a double rule.
     private static let minimumRowHeight = 4.0
-    /// A frame's rules may have gaps at the crossings, but they go all the way around.
-    private static let minimumFrameCoverage = 0.9
+    /// A real frame's rules only break at their crossings, for less than this. Two boxes of a
+    /// diagram side by side can cover 94% of a frame (measured on a real book), with one big gap.
+    private static let largestFrameGap = 3.0
+    /// A drawn array can have a row of indices above a row of empty cells.
+    private static let minimumRowsWithText = 2
     /// A grid this empty is a drawing, as in `TableGrid`.
     private static let minimumFilledShare = 0.4
     /// A page of real tables has a few hundred. The search is quadratic, and past this it's art.
@@ -118,11 +121,7 @@ public enum RuledTables {
         let rows = bands.flatMap { band in
             rows(inBand: band, columnLines: columnLines, verticals: group.verticals, words: inside)
         }
-        let cellCount = rows.count * (columnLines.count - 1)
-        let filled = rows.joined().filter { !$0.isEmpty }.count
-        guard rows.count >= minimumRows,
-            Double(filled) >= Double(cellCount) * minimumFilledShare
-        else { return nil }
+        guard isFilled(rows) else { return nil }
         return TableRegion(rect: frame, rows: rows)
     }
 
@@ -181,7 +180,18 @@ public enum RuledTables {
         return assigned.map(TableGrid.text(from:))
     }
 
-    /// Top, bottom and both sides are ruled nearly end to end.
+    private static func isFilled(_ rows: [[String]]) -> Bool {
+        guard rows.count >= minimumRows, let columnCount = rows.first?.count else { return false }
+        let filled = rows.joined().filter { !$0.isEmpty }.count
+        let hasEmptyColumn = (0..<columnCount).contains { column in
+            rows.allSatisfy { $0[column].isEmpty }
+        }
+        let rowsWithText = rows.filter { row in row.contains { !$0.isEmpty } }.count
+        return !hasEmptyColumn && rowsWithText >= minimumRowsWithText
+            && Double(filled) >= Double(rows.count * columnCount) * minimumFilledShare
+    }
+
+    /// Top, bottom and both sides are ruled end to end.
     private static func hasFrame(
         _ group: Group,
         left: Double,
@@ -189,17 +199,30 @@ public enum RuledTables {
         top: Double,
         bottom: Double
     ) -> Bool {
-        let isCovered = { (spans: [(Double, Double)], start: Double, end: Double) in
-            coverage(of: spans, from: start, to: end) >= (end - start) * minimumFrameCoverage
-        }
         let spansAt = { (y: Double) in
             group.horizontals.filter { abs($0.y - y) <= touchTolerance }.map { ($0.minX, $0.maxX) }
         }
         let spansOn = { (x: Double) in
             group.verticals.filter { abs($0.x - x) <= touchTolerance }.map { ($0.minY, $0.maxY) }
         }
-        return isCovered(spansAt(top), left, right) && isCovered(spansAt(bottom), left, right)
-            && isCovered(spansOn(left), top, bottom) && isCovered(spansOn(right), top, bottom)
+        return largestGap(in: spansAt(top), from: left, to: right) <= largestFrameGap
+            && largestGap(in: spansAt(bottom), from: left, to: right) <= largestFrameGap
+            && largestGap(in: spansOn(left), from: top, to: bottom) <= largestFrameGap
+            && largestGap(in: spansOn(right), from: top, to: bottom) <= largestFrameGap
+    }
+
+    private static func largestGap(
+        in spans: [(Double, Double)],
+        from start: Double,
+        to end: Double
+    ) -> Double {
+        var gap = 0.0
+        var reach = start
+        for span in spans.sorted(by: { $0.0 < $1.0 }) {
+            gap = max(gap, span.0 - reach)
+            reach = max(reach, span.1)
+        }
+        return max(gap, end - reach)
     }
 
     private static func coverage(

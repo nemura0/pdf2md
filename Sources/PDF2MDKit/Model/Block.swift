@@ -17,7 +17,12 @@ public enum Block: Sendable, Equatable {
     case paragraph(String)
     case list([ListItem])
     case code([String])
+    /// A drawing's words, placed by position.
+    case labels([String])
     case displayMath(String)
     case table([[String]])
     case figure(path: String)
+    /// A note from the page's bottom. Without a label nothing in the text pointed at it, and a
+    /// definition with no reference is dropped by Markdown viewers, so it's plain text.
+    case footnote(label: String?, text: String)
 }
