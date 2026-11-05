@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 
 @testable import PDF2MDKit
@@ -236,7 +237,20 @@ struct FigureFilterTests {
         #expect(FigureFilter.kept(figures, pageSize: page).map(\.digest) == ["a", "b"])
     }
 
-    @Test("coverage is the largest image's share of the page, clipped to it")
+    @Test("a scan's images are the page, also when the scan is cut in strips")
+    func strips() {
+        let strips = (0..<4).map { index in
+            FigureCandidate(
+                digest: "strip\(index)",
+                rect: CGRect(x: 0, y: Double(index) * 25, width: 100, height: 25)
+            )
+        }
+        #expect(FigureFilter.imageCoverage(strips, pageSize: page) == 1)
+        #expect(FigureFilter.kept(strips, pageSize: page, isOCR: true).isEmpty)
+        #expect(FigureFilter.kept(strips, pageSize: page, isOCR: false).count == 4)
+    }
+
+    @Test("coverage is the images' share of the page, clipped to it")
     func coverage() {
         let figures = [
             FigureCandidate(digest: "a", rect: CGRect(x: 50, y: 0, width: 100, height: 100))
@@ -394,5 +408,58 @@ struct PageRecognitionTests {
         slide.width = 200
         let plan = PageRecognition.plan(for: slide, rules: [], figures: [], mode: .auto)
         #expect(plan.needsTables)
+    }
+}
+
+@Suite("FigureNamer")
+struct FigureNamerTests {
+    private func figure(_ digest: String, crop: String? = nil) -> FigureCandidate {
+        FigureCandidate(
+            digest: digest,
+            rect: CGRect(x: 0, y: 0, width: 50, height: 50),
+            cropFile: crop ?? "\(digest).png"
+        )
+    }
+
+    private func namer(repeated: Set<String> = [], assets: String? = "a b_assets") -> FigureNamer {
+        FigureNamer(
+            repeatedDigests: repeated,
+            cropDirectory: URL(fileURLWithPath: "/crops"),
+            assetsName: assets
+        )
+    }
+
+    @Test("names follow the page and the order on it")
+    func names() {
+        var namer = namer()
+        #expect(namer.link(for: figure("a"), pageIndex: 11) == "a b_assets/p0012-01.png")
+        #expect(namer.link(for: figure("b"), pageIndex: 11) == "a b_assets/p0012-02.png")
+        #expect(
+            namer.link(for: figure("c", crop: "c.jpg"), pageIndex: 12) == "a b_assets/p0013-01.jpg"
+        )
+        #expect(namer.images.map(\.name) == ["p0012-01.png", "p0012-02.png", "p0013-01.jpg"])
+        #expect(namer.images[0].source.path == "/crops/a.png")
+    }
+
+    @Test("an identical image links to its first copy, and only one file is kept")
+    func duplicates() {
+        var namer = namer()
+        let first = namer.link(for: figure("a"), pageIndex: 0)
+        let second = namer.link(for: figure("a"), pageIndex: 7)
+        #expect(first == second)
+        #expect(namer.images.count == 1)
+    }
+
+    @Test("repeated images, missing crops and --no-images give no link")
+    func dropped() {
+        var repeated = namer(repeated: ["logo"])
+        #expect(repeated.link(for: figure("logo"), pageIndex: 0) == nil)
+        var missing = namer()
+        var noCrop = figure("a")
+        noCrop.cropFile = nil
+        #expect(missing.link(for: noCrop, pageIndex: 0) == nil)
+        var disabled = namer(assets: nil)
+        #expect(disabled.link(for: figure("a"), pageIndex: 0) == nil)
+        #expect(repeated.images.isEmpty && missing.images.isEmpty && disabled.images.isEmpty)
     }
 }

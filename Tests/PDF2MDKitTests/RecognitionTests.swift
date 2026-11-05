@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import ImageIO
 import PDFKit
 import Testing
 
@@ -149,5 +150,72 @@ struct RecognitionTests {
         let after = try #require(markdown.range(of: "No structure wins"))
         #expect(lead.upperBound < table.lowerBound)
         #expect(table.upperBound < after.lowerBound)
+    }
+
+    // MARK: Images
+
+    private func figureLinks(in markdown: String) -> [String] {
+        markdown.matches(of: /!\[Figure\]\(([^)]+)\)/).map { String($0.1) }
+    }
+
+    @Test("a figure is cropped and linked, and the logo on every slide isn't")
+    func figures() async throws {
+        let fixture = try fixture("slides.pdf")
+        let truth = try #require(fixture.truth)
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+
+        let (markdown, report, url) = try await harness.convert(fixture)
+
+        #expect(report.stats.images == truth.keptFigures)
+        let links = figureLinks(in: markdown)
+        #expect(links == ["slides_assets/p0005-01.png"])
+        let file = url.deletingLastPathComponent().appendingPathComponent(links[0])
+        let source = try #require(CGImageSourceCreateWithURL(file as CFURL, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        // The chart was placed at 520 by 260 points, and the crop is a 2x render of that.
+        #expect(abs(image.width - 1040) <= 2)
+        #expect(abs(image.height - 520) <= 2)
+    }
+
+    @Test("--no-images leaves no links and no folder")
+    func noImages() async throws {
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+        let (markdown, report, url) = try await harness.convert(
+            try fixture("slides.pdf"),
+            options: ConvertOptions(includeImages: false)
+        )
+        #expect(figureLinks(in: markdown).isEmpty)
+        #expect(report.stats.images == 0)
+        let assets = url.deletingLastPathComponent().appendingPathComponent("slides_assets")
+        #expect(!FileManager.default.fileExists(atPath: assets.path))
+    }
+
+    @Test("a page with no figures leaves no assets folder behind")
+    func noFigures() async throws {
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+        let (_, _, url) = try await harness.convert(try fixture("rotated.pdf"))
+        let assets = url.deletingLastPathComponent().appendingPathComponent("rotated_assets")
+        #expect(!FileManager.default.fileExists(atPath: assets.path))
+    }
+
+    @Test("links are percent-encoded, whatever the file is called")
+    func encodedLinks() async throws {
+        let original = try fixture("slides.pdf")
+        let renamed = Fixture(
+            fileName: "Clase 03 — POO 🚀.pdf",
+            data: original.data,
+            truth: original.truth
+        )
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+        let (markdown, _, url) = try await harness.convert(renamed)
+        let link = try #require(figureLinks(in: markdown).first)
+        #expect(!link.contains(" ") && !link.contains("🚀"))
+        let decoded = try #require(link.removingPercentEncoding)
+        let file = url.deletingLastPathComponent().appendingPathComponent(decoded)
+        #expect(FileManager.default.fileExists(atPath: file.path))
     }
 }

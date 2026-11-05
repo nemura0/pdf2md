@@ -25,6 +25,8 @@ actor PageWorker {
     private let url: URL
     private let slot: FileSlot?
     private let options: ConvertOptions
+    private let cropDirectory: URL?
+    private var cropNames: [String: String] = [:]
     private var document: PDFDocument?
     private var pagesSinceOpen = 0
 
@@ -32,7 +34,13 @@ actor PageWorker {
         queue.asUnownedSerialExecutor()
     }
 
-    init(index: Int, url: URL, slotURL: URL?, options: ConvertOptions) throws {
+    init(
+        index: Int,
+        url: URL,
+        slotURL: URL?,
+        options: ConvertOptions,
+        cropDirectory: URL?
+    ) throws {
         self.queue = DispatchSerialQueue(
             label: "pdf2md.worker.\(index)",
             autoreleaseFrequency: .workItem
@@ -40,6 +48,7 @@ actor PageWorker {
         self.url = url
         self.slot = try slotURL.map(FileSlot.init(url:))
         self.options = options
+        self.cropDirectory = cropDirectory
     }
 
     /// Extracts a page and renders it if Vision is needed. Takes the page slot. `finish` must
@@ -71,7 +80,7 @@ actor PageWorker {
         let geometry = DisplayGeometry(page: page)
         let trace = ContentStreamScanner.scan(page: pageRef, geometry: geometry)
         let text = PDFTextExtractor.extract(page: page, trace: trace, geometry: geometry)
-        let record = PageRecord(
+        var record = PageRecord(
             index: pageIndex,
             width: geometry.size.width,
             height: geometry.size.height,
@@ -87,8 +96,43 @@ actor PageWorker {
             figures: trace.figures,
             mode: options.ocrMode
         )
-        let rendered = plan.usesVision ? PageRenderer.render(page, size: geometry.size) : nil
-        return PreparedPage(record: record, image: rendered?.image, needsOCR: plan.needsOCR)
+        let figures =
+            options.includeImages
+            ? FigureFilter.kept(trace.figures, pageSize: geometry.size, isOCR: plan.needsOCR)
+            : []
+        let needsRender = plan.usesVision || figures.contains { cropNames[$0.digest] == nil }
+        let rendered = needsRender ? PageRenderer.render(page, size: geometry.size) : nil
+        record.figures = try cropped(figures, from: rendered)
+        return PreparedPage(
+            record: record,
+            image: plan.usesVision ? rendered?.image : nil,
+            needsOCR: plan.needsOCR
+        )
+    }
+
+    /// One image is cropped once by this worker, however often it appears. A logo repeated on
+    /// every page is cropped here too, since only emit knows that it repeats.
+    private func cropped(
+        _ figures: [FigureCandidate],
+        from rendered: RenderedPage?
+    ) throws -> [FigureCandidate] {
+        guard let cropDirectory else { return figures }
+        return try figures.map { figure in
+            var result = figure
+            if let known = cropNames[figure.digest] {
+                result.cropFile = known
+            } else if let rendered {
+                result.cropFile = try CropWriter.write(
+                    rendered,
+                    rect: figure.rect,
+                    isPhoto: figure.isPhoto,
+                    name: figure.digest,
+                    directory: cropDirectory
+                )
+                cropNames[figure.digest] = result.cropFile
+            }
+            return result
+        }
     }
 
     private func currentDocument() throws -> PDFDocument {

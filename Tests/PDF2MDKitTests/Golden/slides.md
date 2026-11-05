@@ -56,6 +56,8 @@ class Punto:
 
 Promedios por unidad en el semestre anterior.
 
+![Figure](slides_assets/p0005-01.png)
+
 <!-- page 6 -->
 
 ## Evaluaciones

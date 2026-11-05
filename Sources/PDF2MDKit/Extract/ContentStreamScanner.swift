@@ -99,6 +99,7 @@ final class ScanState {
     private var lineMatrix = CGAffineTransform.identity
     private var fonts: [CGPDFDictionaryRef: ResolvedFont] = [:]
     private var digests: [CGPDFStreamRef: String] = [:]
+    private var photoDigests: Set<String> = []
     private var activeForms: Set<CGPDFStreamRef> = []
     private var resourceStack: [CGPDFDictionaryRef]
     private let pageSize: CGSize
@@ -368,7 +369,10 @@ final class ScanState {
     private func addFigure(stream: CGPDFStreamRef, rect unit: CGRect) {
         let rect = unit.applying(graphics.ctm)
         guard isFigureSized(rect) else { return }
-        trace.figures.append(FigureCandidate(digest: streamDigest(stream), rect: rect))
+        let digest = streamDigest(stream)
+        trace.figures.append(
+            FigureCandidate(digest: digest, rect: rect, isPhoto: photoDigests.contains(digest))
+        )
     }
 
     private func isFigureSized(_ rect: CGRect) -> Bool {
@@ -392,6 +396,7 @@ final class ScanState {
         }
         let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         digests[stream] = digest
+        if format == .jpegEncoded || format == .JPEG2000 { photoDigests.insert(digest) }
         return digest
     }
 

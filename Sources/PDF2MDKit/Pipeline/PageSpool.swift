@@ -3,10 +3,16 @@ import Foundation
 /// One Codable page record per file, read back in order at emit (ADR-0006).
 public struct PageSpool: Sendable {
     public let directory: URL
+    /// Image crops, one per digest, until commit moves the kept ones to the assets folder.
+    public let cropDirectory: URL
 
     public init(directory: URL) throws {
         self.directory = directory
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        self.cropDirectory = directory.appendingPathComponent("crops", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: cropDirectory,
+            withIntermediateDirectories: true
+        )
     }
 
     public func write(_ record: PageRecord) throws {

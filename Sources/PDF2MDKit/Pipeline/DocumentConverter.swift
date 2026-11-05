@@ -160,7 +160,8 @@ public struct DocumentConverter: Sendable {
                     index: index,
                     url: pdf,
                     slotURL: context.paths.slots.appendingPathComponent("page-\(index)"),
-                    options: options
+                    options: options,
+                    cropDirectory: spool.cropDirectory
                 )
                 group.addTask { [context] in
                     try await Self.runWorker(
@@ -261,10 +262,15 @@ public struct DocumentConverter: Sendable {
 
         var flow = PageFlow()
         let assembler = PageAssembler(profile: profile)
+        var namer = FigureNamer(
+            repeatedDigests: profile.repeatedImageDigests,
+            cropDirectory: spool.cropDirectory,
+            assetsName: options.includeImages ? reserved.assets?.lastPathComponent : nil
+        )
         for page in 0..<summary.pageCount {
             try autoreleasepool {
                 let record = try spool.read(page: page)
-                let blocks = assembler.blocks(for: record)
+                let blocks = assembler.blocks(for: record, namer: &namer)
                 stats.tables += record.tables.count
                 try flow.write(
                     blocks,
@@ -275,7 +281,8 @@ public struct DocumentConverter: Sendable {
         }
         try flow.finish(to: &stream)
         try stream.close()
-        return []
+        stats.images = namer.images.count
+        return namer.images
     }
 
     private func buildProfile(

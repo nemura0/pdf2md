@@ -3,6 +3,10 @@ import Foundation
 
 /// Turns one spooled page into blocks, applying the whole-document decisions from the profile.
 struct PageAssembler {
+    /// A few words over an image are its labels, already in the crop. Beyond this, it's text set
+    /// over a picture, and the text is what the reader needs.
+    private static let maximumFigureLabelWords = 30
+
     private let profile: DocumentProfile
     private let builder: BlockBuilder
 
@@ -11,14 +15,15 @@ struct PageAssembler {
         self.builder = BlockBuilder(profile: profile)
     }
 
-    func blocks(for record: PageRecord) -> [Block] {
+    func blocks(for record: PageRecord, namer: inout FigureNamer) -> [Block] {
         let lines = LineBuilder.lines(from: record.words).filter { line in
             !profile.isRunningMargin(line, pageHeight: record.height)
                 && !isTitleLine(line, in: record)
         }
-        let objects = record.tables.map {
+        let tables = record.tables.map {
             PageObject(rect: $0.rect, blocks: [.table($0.rows)], coversText: true)
         }
+        let objects = tables + figures(of: record, namer: &namer)
         // Covered lines go first, since a table's rows would read as columns of text.
         let flowing = ObjectPlacement.removingCovered(lines, by: objects)
         var blocks: [Block] = []
@@ -40,6 +45,20 @@ struct PageAssembler {
             }
         }
         return blocks
+    }
+
+    private func figures(of record: PageRecord, namer: inout FigureNamer) -> [PageObject] {
+        record.figures.compactMap { figure in
+            guard let link = namer.link(for: figure, pageIndex: record.index) else { return nil }
+            let inside = record.words.filter { word in
+                figure.rect.contains(CGPoint(x: word.rect.midX, y: word.rect.midY))
+            }
+            return PageObject(
+                rect: figure.rect,
+                blocks: [.figure(path: link)],
+                coversText: inside.count < Self.maximumFigureLabelWords
+            )
+        }
     }
 
     private func isTitleLine(_ line: TextLine, in record: PageRecord) -> Bool {

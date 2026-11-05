@@ -66,11 +66,14 @@ public struct FigureCandidate: Codable, Sendable, Equatable {
     public var digest: String
     public var rect: CGRect
     public var cropFile: String?
+    /// Stored as JPEG or JPEG 2000 in the PDF, which makes it a photo.
+    public var isPhoto: Bool
 
-    public init(digest: String, rect: CGRect, cropFile: String? = nil) {
+    public init(digest: String, rect: CGRect, cropFile: String? = nil, isPhoto: Bool = false) {
         self.digest = digest
         self.rect = rect
         self.cropFile = cropFile
+        self.isPhoto = isPhoto
     }
 }
 
