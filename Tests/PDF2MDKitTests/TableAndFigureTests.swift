@@ -362,6 +362,40 @@ struct ObjectPlacementTests {
         )
     }
 
+    /// A heading under a pair of drawings that only reaches the left one comes after both.
+    @Test("objects side by side stay together when the lines between them come after both")
+    func sideBySide() {
+        let lines = [
+            line("above", y: 50),
+            line("A heading", x: 72, y: 300),
+            line("a paragraph that runs as far as the drawing on the right", x: 72, y: 330),
+        ]
+        let right = object(CGRect(x: 300, y: 100, width: 100, height: 120))
+        let left = object(CGRect(x: 72, y: 120, width: 100, height: 80))
+        #expect(
+            ObjectPlacement.segments(lines: lines, objects: [left, right]) == [
+                .lines([lines[0]]), .object(right), .object(left), .lines([lines[1], lines[2]]),
+            ]
+        )
+    }
+
+    @Test("objects at one height in two columns each stay in their own")
+    func sideBySideInColumns() {
+        let leftLines = [line("left top", x: 72, y: 50), line("left end", x: 72, y: 300)]
+        let rightLines = [line("right top", x: 330, y: 50), line("right end", x: 330, y: 300)]
+        let leftFigure = object(CGRect(x: 72, y: 100, width: 200, height: 100))
+        let rightFigure = object(CGRect(x: 330, y: 100, width: 200, height: 100))
+        #expect(
+            ObjectPlacement.segments(
+                lines: leftLines + rightLines,
+                objects: [leftFigure, rightFigure]
+            ) == [
+                .lines([leftLines[0]]), .object(leftFigure), .lines([leftLines[1], rightLines[0]]),
+                .object(rightFigure), .lines([rightLines[1]]),
+            ]
+        )
+    }
+
     @Test("in a column, it follows that column's lines, not a higher line in the next column")
     func column() {
         let left = [line("left top", x: 72, y: 50), line("left end", x: 72, y: 300)]

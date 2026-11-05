@@ -101,14 +101,19 @@ struct MarkdownStreamTests {
 
 @Suite("PageFlow")
 struct PageFlowTests {
-    private func flow(_ pages: [[Block]]) throws -> String {
+    private func flow(_ pages: [[Block]], lost: Set<Int> = []) throws -> String {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("flow-\(UUID().uuidString).md")
         defer { try? FileManager.default.removeItem(at: url) }
         var stream = try MarkdownStream(url: url)
         var flow = PageFlow()
         for (index, page) in pages.enumerated() {
-            try flow.write(page, pageMarker: "<!-- page \(index + 1) -->", to: &stream)
+            try flow.write(
+                page,
+                pageMarker: "<!-- page \(index + 1) -->",
+                isLost: lost.contains(index),
+                to: &stream
+            )
         }
         try flow.finish(to: &stream)
         try stream.close()
@@ -121,6 +126,21 @@ struct PageFlowTests {
             [.paragraph("It starts")], [.paragraph("and ends."), .heading(level: 2, text: "Next")],
         ])
         #expect(text == "<!-- page 1 -->\n\nIt starts and ends.\n\n<!-- page 2 -->\n\n## Next\n")
+    }
+
+    @Test("a page that failed keeps its marker, and nothing is joined across it")
+    func lostPage() throws {
+        let text = try flow([[.paragraph("It starts")], [], [.paragraph("and ends.")]], lost: [1])
+        #expect(
+            text
+                == "<!-- page 1 -->\n\nIt starts\n\n<!-- page 2 -->\n\n<!-- page 3 -->\n\nand ends.\n"
+        )
+    }
+
+    @Test("a blank page has no marker")
+    func blankPage() throws {
+        let text = try flow([[.paragraph("One.")], [], [.paragraph("Two.")]])
+        #expect(!text.contains("page 2"))
     }
 
     @Test("a paragraph over three pages stays one paragraph")

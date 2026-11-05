@@ -89,6 +89,9 @@ enum DrawingBookFixture {
             + text("registrado", size: 9, x: 240, y: y - 34)
             + text("registrado", size: 9, x: 240, y: y - 34)
             + "q 0.4 w 140 \(y) m 140 \(y - 22) 330 \(y - 22) 330 \(y) c S Q\n"
+            // An arrow stopping short of a box, and the variable it starts from, set apart.
+            + "q 0.4 w 48 \(y + 18) m 52 \(y + 34) 64 \(y + 34) 70 \(y + 28) c S Q\n"
+            + text("prod", size: 9, x: 26, y: y + 8)
     }
 
     /// A table the way LaTeX's `tabular` draws it: a rule per row, and its column lines cut at
@@ -161,11 +164,17 @@ enum DrawingBookFixture {
             + body(["Un entorno de desarrollo"], top: 330)
             + marker("1,", x: 142, y: 330)
             + text("es la herramienta que usaremos.", x: 155, y: 330)
+            + body(["El siguiente es el compilador"], top: 318)
+            + marker("2", x: 164.5, y: 318)
+            + text(", que traduce el codigo.", x: 170, y: 318)
             + body(
                 ["Este otro parrafo empieza en esta pagina y no termina en ella porque sigue en"],
                 top: 294
             )
-            + notes([("1", "IDE: entorno integrado de desarrollo")], ruleY: 60)
+            + notes(
+                [("1", "IDE: entorno integrado de desarrollo"), ("2", "Se llama javac")],
+                ruleY: 60
+            )
     }
 
     private static func listingsPage() -> String {

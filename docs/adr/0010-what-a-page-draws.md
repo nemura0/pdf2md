@@ -73,11 +73,13 @@ We choose **C**, **F** and **I**.
 - **Drawings.** Shapes are clustered by distance. A cluster counts with three or more shapes, or an
   inner rule, since TikZ can draw a class box as one path. A cluster crossed by long lines of text,
   full of numbered lines, mostly code inside a frame, or holding long lines of prose isn't a drawing.
-  A captioned frame close to a drawing joins it. Slides are skipped, because their framed lists matter
+  A captioned frame close to a drawing joins it, and so does an arrow level with it or a short line
+  beside it, unless that line ends a sentence or is in monospace. Slides are skipped, because their framed lists matter
   more. With `--no-images` only the labels are written. A drawing repeating on 30% of pages is
   furniture and is dropped, labels included.
 - **Identity.** A drawing's digest holds its shapes and its words, because one book drew the same
-  boxes on three pages with different labels.
+  boxes on three pages with different labels. It doesn't hold colours, so the same boxes with another
+  one highlighted share a crop.
 - **Tables.** Rules touching each other form a grid, which needs a closed frame, text in at least two
   rows, and no wholly empty column. Vision still runs on pages with none, and its tables are dropped
   when they overlap a table already found or are mostly monospace.
@@ -91,11 +93,11 @@ This extends ADR-0004, whose note that labels stay in the image no longer holds 
 
 ## Consequences
 
-**Positive:** on that book, sentence cuts between blocks go from 424 to 0, and 121 diagrams keep their
+**Positive:** on that book, sentence cuts between blocks go from 424 to 0, and 122 diagrams keep their
 words. All 69 footnotes are linked, and tables come out right without Vision. It ran in about 5 s,
 against 68 s before, with Vision's model already loaded: only 2 image-only pages still need OCR.
 
-**Negative:** the labels fence adds tokens, and the whole output went up about 3% (244,662 to 251,177
+**Negative:** the labels fence adds tokens, and the whole output went up about 3% (244,662 to 251,324
 estimated) even with thousands of empty fence lines gone. Arrows are only in the image. Detection is
 heuristic, tuned on one book, so an unusual drawing can be missed or a framed paragraph taken for one.
 Fractions at body size in a display equation still flatten, because their lines overlap as one, and

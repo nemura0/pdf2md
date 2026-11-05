@@ -78,6 +78,9 @@ final class ScanState {
     private static let maximumRules = 4000
     /// Only a drawing's bounds need these, and past this a map has shown most of its extent.
     private static let maximumShapes = 20000
+    /// A table's marks are one code each. A single string can decompress to hundreds of megabytes,
+    /// and every code kept takes 8 bytes.
+    private static let maximumSymbolCodes = 256
     /// Depth limits alone allow ten Forms calling ten Forms, twelve levels deep.
     private static let maximumFormsPerPage = 4096
     private static let maximumStateDepth = 512
@@ -230,7 +233,11 @@ final class ScanState {
                 code = Int(bytes[index])
                 index += 1
             }
-            if font.hasNoTextMapping { pendingRun?.symbolCodes.append(code) }
+            if font.hasNoTextMapping, let run = pendingRun,
+                run.symbolCodes.count < Self.maximumSymbolCodes
+            {
+                pendingRun?.symbolCodes.append(code)
+            }
             advance += font.advance(forCode: code) * graphics.fontSize + graphics.charSpacing
             if code == 32, !font.isTwoByte { advance += graphics.wordSpacing }
         }

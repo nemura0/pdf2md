@@ -3,6 +3,7 @@
 /// the time, and a marker in mid-sentence costs an LLM the sentence. Markers and footnotes passed
 /// while a block is held come right after it, in the order the pages had them. A page with nothing
 /// on it, such as LaTeX's blank left-hand pages, has no marker: there is nothing for one to point at.
+/// A page that failed keeps its marker, so the output shows where it was lost.
 struct PageFlow {
     private var held: Block?
     private var pending: [String] = []
@@ -10,9 +11,10 @@ struct PageFlow {
     mutating func write(
         _ blocks: [Block],
         pageMarker: String?,
+        isLost: Bool = false,
         to stream: inout MarkdownStream
     ) throws {
-        guard !blocks.isEmpty else { return }
+        guard !blocks.isEmpty || isLost else { return }
         if let marker = pageMarker { pending.append(marker) }
         let notes = blocks.reversed().prefix { $0.isFootnote }.reversed()
             .map(MarkdownRenderer.render)

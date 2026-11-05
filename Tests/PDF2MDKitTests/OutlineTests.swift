@@ -305,6 +305,19 @@ struct OutlineTests {
         let profile = builder.finish(metadataTitle: "Metadata", fileName: "book")
         #expect(profile.headingLevel(forSize: 14) == 2)
     }
+
+    /// A real page has a handful. Twenty thousand on a page of 3,000 lines would take minutes.
+    @Test("a page's entries are limited, so a hostile outline can't hold up a conversion")
+    func entriesPerPage() {
+        let lines = (0..<300).map { index in
+            line("Seccion \(index)", y: 100 + Double(index) * 20, size: 14)
+        }
+        let entries = (0..<300).map { index in
+            OutlineEntry(pageIndex: 0, depth: 1, label: "Seccion \(index)")
+        }
+        let marked = OutlineMatcher.marking(lines, with: entries, minimumSize: 12)
+        #expect(marked.filter { $0.outlineLevel != nil }.count == 200)
+    }
 }
 
 @Suite("Running heads")

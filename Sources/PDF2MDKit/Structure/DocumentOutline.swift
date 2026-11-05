@@ -40,6 +40,10 @@ enum OutlineMatcher {
         min(topLevel + max(depth, 0), deepestLevel)
     }
 
+    /// A real page has a handful. Matching costs entries × lines, and nothing stops a PDF from
+    /// pointing its whole outline at one page of thousands of lines.
+    private static let maximumEntriesPerPage = 200
+
     /// Returns the lines top to bottom with each entry's line marked, merging a title on several
     /// lines and the chapter number above it. A heading is at least `minimumSize` or bold. Without
     /// `joinsNumbers`, the lines marked show the style of the title alone.
@@ -53,10 +57,11 @@ enum OutlineMatcher {
         var sorted = lines.sorted {
             ($0.baseline, Double($0.rect.minX)) < ($1.baseline, Double($1.rect.minX))
         }
-        for entry in entries {
+        var texts = sorted.map { TitleResolver.comparable($0.text) }
+        for entry in entries.prefix(maximumEntriesPerPage) {
             let target = TitleResolver.comparable(entry.label)
             guard !target.isEmpty,
-                let run = bestRun(for: target, in: sorted, minimumSize: minimumSize)
+                let run = bestRun(for: target, in: sorted, texts: texts, minimumSize: minimumSize)
             else { continue }
             let hasNumber =
                 joinsNumbers && hasNumberLine(before: run.lowerBound, in: sorted, minimumSize)
@@ -64,6 +69,10 @@ enum OutlineMatcher {
             var heading = TextLine(words: sorted[start..<run.upperBound].flatMap(\.words))
             heading.outlineLevel = level(forDepth: entry.depth)
             sorted.replaceSubrange(start..<run.upperBound, with: [heading])
+            texts.replaceSubrange(
+                start..<run.upperBound,
+                with: [TitleResolver.comparable(heading.text)]
+            )
         }
         return sorted
     }
@@ -73,11 +82,19 @@ enum OutlineMatcher {
     private static func bestRun(
         for target: String,
         in lines: [TextLine],
+        texts: [String],
         minimumSize: Double
     ) -> Range<Int>? {
         var best: (range: Range<Int>, size: Double)?
         for start in lines.indices {
-            guard let run = run(from: start, for: target, in: lines, minimumSize: minimumSize)
+            guard
+                let run = run(
+                    from: start,
+                    for: target,
+                    in: lines,
+                    texts: texts,
+                    minimumSize: minimumSize
+                )
             else { continue }
             guard let current = best else {
                 best = run
@@ -93,6 +110,7 @@ enum OutlineMatcher {
         from start: Int,
         for target: String,
         in lines: [TextLine],
+        texts: [String],
         minimumSize: Double
     ) -> (range: Range<Int>, size: Double)? {
         var joined = ""
@@ -101,7 +119,7 @@ enum OutlineMatcher {
             guard line.outlineLevel == nil, line.size >= minimumSize || line.isBold,
                 end == start || isClose(lines[end - 1], line)
             else { return nil }
-            joined += TitleResolver.comparable(line.text)
+            joined += texts[end]
             guard joined.count <= target.count + maximumPrefixLength else { return nil }
             if joined.hasSuffix(target) { return (start..<(end + 1), line.size) }
         }

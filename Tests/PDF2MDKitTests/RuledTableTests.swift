@@ -248,6 +248,13 @@ struct SymbolGlyphTests {
         )
     }
 
+    /// Each run is compared with every word on the page, so a hostile page could run for minutes.
+    @Test("a page's symbol runs are limited")
+    func limitedRuns() {
+        let runs = (0..<3000).map { run(codes: [34], x: Double($0) * 10) }
+        #expect(SymbolGlyphs.words(runs: runs, text: []).count == 2000)
+    }
+
     @Test("a check mark with no text becomes a word where it was drawn")
     func checkMark() throws {
         let found = SymbolGlyphs.words(runs: [run(codes: [34], x: 140)], text: [])
