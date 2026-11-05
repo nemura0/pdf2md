@@ -139,6 +139,11 @@ public struct PageRecord: Sendable, Equatable {
         self.didFail = didFail
     }
 
+    /// Landscape pages are slides.
+    public var isSlide: Bool { width > height * Self.slideAspectRatio }
+
+    private static let slideAspectRatio = 1.1
+
     public var size: CGSize { CGSize(width: width, height: height) }
 }
 

@@ -16,8 +16,30 @@ struct PageAssembler {
             !profile.isRunningMargin(line, pageHeight: record.height)
                 && !isTitleLine(line, in: record)
         }
-        let isSlide = record.width > record.height * 1.1
-        return builder.blocks(from: ReadingOrder.order(lines), isSlidePage: isSlide)
+        let objects = record.tables.map {
+            PageObject(rect: $0.rect, blocks: [.table($0.rows)], coversText: true)
+        }
+        // Covered lines go first, since a table's rows would read as columns of text.
+        let flowing = ObjectPlacement.removingCovered(lines, by: objects)
+        var blocks: [Block] = []
+        var hasText = false
+        for segment in ObjectPlacement.segments(
+            lines: ReadingOrder.order(flowing),
+            objects: objects
+        ) {
+            switch segment {
+            case .object(let object):
+                blocks += object.blocks
+            case .lines(let run):
+                blocks += builder.blocks(
+                    from: run,
+                    isSlidePage: record.isSlide,
+                    allowsSlideTitle: !hasText
+                )
+                hasText = true
+            }
+        }
+        return blocks
     }
 
     private func isTitleLine(_ line: TextLine, in record: PageRecord) -> Bool {

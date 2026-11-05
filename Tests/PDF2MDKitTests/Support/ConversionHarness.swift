@@ -42,7 +42,8 @@ struct ConversionHarness {
 
     func convert(
         _ fixture: Fixture,
-        options: ConvertOptions = ConvertOptions()
+        options: ConvertOptions = ConvertOptions(),
+        recognizer: any DocumentRecognizing = VisionDocumentRecognizer()
     ) async throws -> (markdown: String, report: ConversionReport, url: URL) {
         let pdf = directory.appendingPathComponent(fixture.fileName)
         try fixture.data.write(to: pdf)
@@ -51,7 +52,8 @@ struct ConversionHarness {
                 paths: paths,
                 jobs: 4,
                 spoolDirectory: paths.caches.appendingPathComponent(UUID().uuidString),
-                now: { Self.fixedDate }
+                now: { Self.fixedDate },
+                recognizer: recognizer
             )
         )
         let report = try await converter.convert(pdf: pdf, options: options)

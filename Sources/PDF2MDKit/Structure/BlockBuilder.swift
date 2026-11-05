@@ -24,9 +24,14 @@ public struct BlockBuilder: Sendable {
         self.profile = profile
     }
 
-    public func blocks(from lines: [TextLine], isSlidePage: Bool) -> [Block] {
+    /// A page can arrive in pieces around a table or a figure. Only its first piece has a title.
+    public func blocks(
+        from lines: [TextLine],
+        isSlidePage: Bool,
+        allowsSlideTitle: Bool = true
+    ) -> [Block] {
         var state = BuildState(lines: lines)
-        let slideTitle = isSlidePage ? slideTitleLine(in: lines) : nil
+        let slideTitle = isSlidePage && allowsSlideTitle ? slideTitleLine(in: lines) : nil
 
         for (index, line) in lines.enumerated() {
             if line.isMonospace {

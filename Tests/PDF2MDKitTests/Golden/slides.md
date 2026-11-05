@@ -60,25 +60,11 @@ Promedios por unidad en el semestre anterior.
 
 ## Evaluaciones
 
-#### Evaluación Semana Ponderación
-
-#### Prueba 1
-
-5
-
-30%
-
-#### Prueba 2
-
-10
-
-30%
-
-#### Proyecto final
-
-15
-
-40%
+| Evaluación | Semana | Ponderación |
+| --- | --- | --- |
+| Prueba 1 | 5 | 30% |
+| Prueba 2 | 10 | 30% |
+| Proyecto final | 15 | 40% |
 
 Se aprueba con nota 4,0 en cada una.
 

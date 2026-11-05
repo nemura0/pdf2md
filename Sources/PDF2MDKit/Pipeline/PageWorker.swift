@@ -2,6 +2,14 @@ import CoreGraphics
 import Foundation
 import PDFKit
 
+/// A page between its two worker steps. Holds no PDFKit type, so it can cross to Vision.
+struct PreparedPage: @unchecked Sendable {
+    var record: PageRecord
+    /// Set when Vision should look at this page. `CGImage` is immutable.
+    var image: CGImage?
+    var needsOCR: Bool
+}
+
 /// Owns one `PDFDocument` and is the only code that touches it (A3).
 ///
 /// An actor on its own serial queue. Its API is synchronous, so a suspended page can't have the
@@ -34,29 +42,53 @@ actor PageWorker {
         self.options = options
     }
 
-    /// Extracts one page, holding the page slot throughout.
-    func extract(pageIndex: Int) throws -> PageRecord {
+    /// Extracts a page and renders it if Vision is needed. Takes the page slot. `finish` must
+    /// follow unless this throws, so the slot stays held while Vision works on the page.
+    func prepare(pageIndex: Int) throws -> PreparedPage {
         slot?.lockExclusively()
-        defer { slot?.unlock() }
-        return try autoreleasepool {
-            let document = try currentDocument()
-            guard let page = document.page(at: pageIndex), let pageRef = page.pageRef else {
-                throw ConversionFailure("page \(pageIndex + 1) couldn't be read")
-            }
-            let geometry = DisplayGeometry(page: page)
-            let trace = ContentStreamScanner.scan(page: pageRef, geometry: geometry)
-            let text = PDFTextExtractor.extract(page: page, trace: trace, geometry: geometry)
-            return PageRecord(
-                index: pageIndex,
-                width: geometry.size.width,
-                height: geometry.size.height,
-                words: text.words,
-                figures: [],
-                rules: trace.rules,
-                matchedWords: text.matched,
-                unmatchedWords: text.unmatched
-            )
+        do {
+            return try autoreleasepool { try read(pageIndex: pageIndex) }
+        } catch {
+            slot?.unlock()
+            throw error
         }
+    }
+
+    func finish(_ prepared: PreparedPage, recognized: RecognizedPage?) -> PageRecord {
+        defer { slot?.unlock() }
+        return PageRecognition.applying(
+            recognized,
+            to: prepared.record,
+            needsOCR: prepared.needsOCR
+        )
+    }
+
+    private func read(pageIndex: Int) throws -> PreparedPage {
+        let document = try currentDocument()
+        guard let page = document.page(at: pageIndex), let pageRef = page.pageRef else {
+            throw ConversionFailure("page \(pageIndex + 1) couldn't be read")
+        }
+        let geometry = DisplayGeometry(page: page)
+        let trace = ContentStreamScanner.scan(page: pageRef, geometry: geometry)
+        let text = PDFTextExtractor.extract(page: page, trace: trace, geometry: geometry)
+        let record = PageRecord(
+            index: pageIndex,
+            width: geometry.size.width,
+            height: geometry.size.height,
+            words: text.words,
+            figures: [],
+            rules: trace.rules,
+            matchedWords: text.matched,
+            unmatchedWords: text.unmatched
+        )
+        let plan = PageRecognition.plan(
+            for: record,
+            rules: trace.rules,
+            figures: trace.figures,
+            mode: options.ocrMode
+        )
+        let rendered = plan.usesVision ? PageRenderer.render(page, size: geometry.size) : nil
+        return PreparedPage(record: record, image: rendered?.image, needsOCR: plan.needsOCR)
     }
 
     private func currentDocument() throws -> PDFDocument {

@@ -66,10 +66,21 @@ public enum MarkdownRenderer {
         return ([rendered[0], separator] + rendered.dropFirst()).joined(separator: "\n")
     }
 
+    /// Cells usually arrive escaped by `InlineRenderer`, and a doubled backslash would end the
+    /// cell at the pipe.
     private static func escapeCell(_ cell: String) -> String {
-        cell.replacingOccurrences(of: "|", with: "\\|")
-            .split(whereSeparator: \.isNewline)
-            .joined(separator: " ")
+        var output = ""
+        var isEscaped = false
+        for character in cell {
+            if character.isNewline {
+                output.append(" ")
+            } else {
+                if character == "|", !isEscaped { output.append("\\") }
+                output.append(character)
+            }
+            isEscaped = character == "\\" && !isEscaped
+        }
+        return output
     }
 
     private static func percentEncoded(_ path: String) -> String {

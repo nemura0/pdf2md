@@ -42,6 +42,7 @@ public struct DocumentConverter: Sendable {
         public var jobs: Int
         public var spoolDirectory: URL
         public var now: @Sendable () -> Date
+        public var recognizer: any DocumentRecognizing
         public var onOpening: @Sendable () -> Void
         public var onStarted: @Sendable (Int) -> Void
         public var onPage: @Sendable (Int, Int) -> Void
@@ -55,6 +56,7 @@ public struct DocumentConverter: Sendable {
             jobs: Int,
             spoolDirectory: URL,
             now: @escaping @Sendable () -> Date = { Date() },
+            recognizer: any DocumentRecognizing = VisionDocumentRecognizer(),
             onOpening: @escaping @Sendable () -> Void = {},
             onStarted: @escaping @Sendable (Int) -> Void = { _ in },
             onPage: @escaping @Sendable (Int, Int) -> Void = { _, _ in },
@@ -65,6 +67,7 @@ public struct DocumentConverter: Sendable {
             self.jobs = jobs
             self.spoolDirectory = spoolDirectory
             self.now = now
+            self.recognizer = recognizer
             self.onOpening = onOpening
             self.onStarted = onStarted
             self.onPage = onPage
@@ -188,22 +191,41 @@ public struct DocumentConverter: Sendable {
         while let index = await queue.take() {
             try Task.checkCancellation()
             var record: PageRecord
+            var didFail = false
             do {
-                record = try await worker.extract(pageIndex: index)
+                record = try await process(index, worker: worker, context: context)
                 try spool.write(record)
             } catch {
                 // Bad values can't be encoded either. If this write fails too, the disk is the
                 // problem, and that is worth failing the file for.
                 record = PageRecord(index: index, width: 0, height: 0, didFail: true)
                 try spool.write(record)
+                didFail = true
                 stats.failedPages += 1
             }
+            if record.didFail, !didFail { stats.failedPages += 1 }
             stats.matchedWords += record.matchedWords
             stats.unmatchedWords += record.unmatchedWords
             if record.isOCR { stats.ocrPages += 1 }
             context.onPage(await queue.finishOne(), pageCount)
         }
         return stats
+    }
+
+    /// The document stays with its worker. Only the rendered image goes to Vision, and the
+    /// worker's queue is free while it does (A3).
+    private static func process(
+        _ index: Int,
+        worker: PageWorker,
+        context: Context
+    ) async throws -> PageRecord {
+        let prepared = try await worker.prepare(pageIndex: index)
+        var recognized: RecognizedPage?
+        if let image = prepared.image {
+            // A failure here is recorded on the page by `finish`.
+            recognized = try? await context.recognizer.recognize(image)
+        }
+        return await worker.finish(prepared, recognized: recognized)
     }
 
     // MARK: Emit
@@ -243,6 +265,7 @@ public struct DocumentConverter: Sendable {
             try autoreleasepool {
                 let record = try spool.read(page: page)
                 let blocks = assembler.blocks(for: record)
+                stats.tables += record.tables.count
                 try flow.write(
                     blocks,
                     pageMarker: options.includePageMarkers ? "<!-- page \(page + 1) -->" : nil,

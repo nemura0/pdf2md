@@ -62,27 +62,21 @@ The next equation gives the cost of the outer loop, and the one after it shows t
 
 𝑛 + 1 𝑅 =
 
-2𝑛 − 1 When a formula has a stacked fraction, a linear form can lose its structure, so the page keeps an image of the equation next to the best linear form available.
+2𝑛 − 1
+
+When a formula has a stacked fraction, a linear form can lose its structure, so the page keeps an image of the equation next to the best linear form available.
 
 ### Common costs
 
 The following table lists the cost of common operations on two structures.
 
-#### Operation Array Linked list
+| Operation | Array | Linked list |
+| --- | --- | --- |
+| Read by index | constant | linear |
+| Insert at front | linear | constant |
+| Search unsorted | linear | linear |
 
-Read by index
-
-constant
-
-linear Insert at front
-
-linear
-
-constant Search unsorted
-
-linear
-
-linear No structure wins on every operation, which is why choosing one starts by listing what the program does most often.
+No structure wins on every operation, which is why choosing one starts by listing what the program does most often.
 
 <!-- page 4 -->
 
