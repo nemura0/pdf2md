@@ -1,6 +1,6 @@
 # ADR-0004: Figures are cropped from a page render
 
-- **Status:** accepted
+- **Status:** accepted, extended by ADR-0010 for drawings made of paths
 - **Date:** 2026-11-05
 - **Phase:** P1
 
@@ -51,7 +51,8 @@ and no image decoders to maintain.
 
 **Negative:** a photo embedded above 2× resolution is downsampled, JPEGs get re-encoded,
 and text drawn over an image stays in its crop. Text fully inside a kept figure leaves
-the prose flow, so figure labels are in the image, not the Markdown.
+the prose flow, so figure labels are in the image, not the Markdown. ADR-0010 keeps them for
+drawings made of paths, as a fence after the crop.
 
 **Cost of reverting:** low. The crop is one function behind `PageRendering`.
 
@@ -60,4 +61,4 @@ the prose flow, so figure labels are in the image, not the Markdown.
 - Real slides where 2× crops are too coarse to read. The fix would be raising the scale
   by source resolution, not changing the approach.
 - Figures drawn straight into the page content with no XObject being common in real
-  samples. Those are not detected today, and would need path clustering.
+  samples. They were, in the first real book, so ADR-0010 clusters paths to find them.
