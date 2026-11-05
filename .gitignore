@@ -1,0 +1,26 @@
+# Build products
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+*.dSYM/
+
+# Generated test documents. Never commit real or synthetic PDFs.
+Fixtures/
+*.pdf
+*.PDF
+
+# Conversion and benchmark output
+*_assets/
+bench-results/
+coverage/
+
+# Machine-specific notes and local agent settings
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Editors and macOS
+.DS_Store
+.idea/
+.vscode/
