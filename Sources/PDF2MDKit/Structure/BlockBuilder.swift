@@ -367,6 +367,7 @@ public struct BlockBuilder: Sendable {
             flushParagraph()
             flushHeading()
             flushList()
+            if CodeLayout.startsOver(line, after: codeLines) { flushCode() }
             codeLines.append(line)
         }
 
@@ -469,6 +470,15 @@ enum CodeLayout {
     private static func isNumberOnly(_ line: TextLine) -> Bool {
         !line.isMonospace && line.lineNumber == nil && line.words.count == 1
             && TextLine.isPlainNumber(line.words[0])
+    }
+
+    /// Numbers that go back mean a new listing, such as the second of a pair set side by side.
+    static func startsOver(_ line: TextLine, after lines: [TextLine]) -> Bool {
+        guard let current = number(of: line).flatMap(Int.init),
+            let previous = lines.last(where: { number(of: $0) != nil }).flatMap(number(of:))
+                .flatMap(Int.init)
+        else { return false }
+        return current <= previous
     }
 
     private static func number(of line: TextLine) -> String? {

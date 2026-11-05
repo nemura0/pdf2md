@@ -305,6 +305,23 @@ struct BlockBuilderTests {
         return BlockBuilder(profile: profile).blocks(from: lines, isSlidePage: isSlide)
     }
 
+    @Test("line numbers going back start a new listing")
+    func listingStartsOver() throws {
+        let listing = { (number: Int, code: String, y: Double, x: Double) in
+            TextLine(
+                words: [word("\(number)", x: x, y: y, size: 5)]
+                    + words(code, x: x + 8, y: y, size: 8, font: .mono)
+            )
+        }
+        let result = blocks([
+            listing(1, "x = 15", 100, 15),
+            listing(2, "print(x)", 110, 15),
+            listing(1, "class Main", 120, 190),
+            listing(2, "{", 130, 190),
+        ])
+        #expect(result == [.code(["1 x = 15", "2 print(x)"]), .code(["1 class Main", "2 {"])])
+    }
+
     @Test("wrapped lines reflow into one paragraph")
     func reflow() {
         let result = blocks([line("first line of it", y: 100), line("and the second", y: 112)])

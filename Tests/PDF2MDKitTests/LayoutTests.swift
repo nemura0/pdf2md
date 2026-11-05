@@ -18,6 +18,30 @@ struct LineBuilderTests {
         #expect(LineBuilder.lines(from: input).map(\.text) == ["first", "second"])
     }
 
+    @Test("a word drawn twice for fake bold, with no space between the copies, is one word")
+    func overprintedWord() {
+        let doubled = Word(
+            text: "estacionadoestacionado",
+            rect: CGRect(x: 157, y: 77, width: 54, height: 14.6),
+            baseline: 88.7,
+            size: 10,
+            font: .body
+        )
+        #expect(LineBuilder.lines(from: [doubled]).map(\.text) == ["estacionado"])
+    }
+
+    @Test("a repeating word at its normal width stays as it is")
+    func repeatingNumber() {
+        let number = Word(
+            text: "33333333",
+            rect: CGRect(x: 72, y: 90, width: 40, height: 13),
+            baseline: 100,
+            size: 10,
+            font: .body
+        )
+        #expect(LineBuilder.lines(from: [number]).map(\.text) == ["33333333"])
+    }
+
     @Test("two columns on one baseline split at the gutter")
     func twoColumnsSplit() {
         let input = words("left text", x: 72, y: 100) + words("right text", x: 320, y: 100)
@@ -117,6 +141,41 @@ struct ReadingOrderTests {
                 y: y + Double(index) * 14
             )
         }
+    }
+
+    /// A number in the gutter, the way `listings` sets it, then the code.
+    private func listingLine(_ number: Int, _ code: String, x: Double, y: Double) -> TextLine {
+        TextLine(
+            words: [word("\(number)", x: x, y: y, size: 5)]
+                + words(code, x: x + 8, y: y, size: 8, font: .mono)
+        )
+    }
+
+    @Test("two listings side by side read one after the other, however short their lines")
+    func sideBySideListings() {
+        let left = (1...4).map { listingLine($0, "x = \($0)", x: 15, y: 300 + Double($0) * 10) }
+        let right = (1...6).map {
+            listingLine($0, "int value\($0) = \($0);", x: 190, y: 300 + Double($0) * 10)
+        }
+        let above = line(
+            "A long sentence over both listings that runs across the whole page width easily",
+            x: 15,
+            y: 280
+        )
+        let ordered = ReadingOrder.order((left + right + [above]).shuffled())
+        #expect(ordered == [above] + left + right)
+    }
+
+    @Test("a short sentence below two listings comes after both of them")
+    func sentenceBelowListings() {
+        let left = (1...4).map { listingLine($0, "x = \($0)", x: 15, y: 300 + Double($0) * 10) }
+        let right = (1...4).map {
+            listingLine($0, "int value\($0) = \($0);", x: 190, y: 300 + Double($0) * 10)
+        }
+        let before = line("Lo mismo en Java:", x: 15, y: 290)
+        let after = line("Y una tabla:", x: 15, y: 360)
+        let ordered = ReadingOrder.order((left + right + [before, after]).shuffled())
+        #expect(ordered == [before] + left + right + [after])
     }
 
     @Test("a single column stays top to bottom")

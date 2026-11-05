@@ -16,6 +16,11 @@ public enum ReadingOrder {
     public static func order(_ lines: [TextLine]) -> [TextLine] {
         let sorted = lines.sorted(by: isAbove)
         guard let gutter = findGutter(in: sorted) else { return sorted }
+        let lines = sorted.filter { !($0.rect.minX < gutter && $0.rect.maxX > gutter) }
+        let isListingPair = isListingPair(
+            lines.filter { $0.rect.maxX <= gutter },
+            lines.filter { $0.rect.minX >= gutter }
+        )
 
         var ordered: [TextLine] = []
         var left: [TextLine] = []
@@ -30,7 +35,11 @@ public enum ReadingOrder {
             right = []
         }
         for line in sorted {
-            if line.rect.minX < gutter, line.rect.maxX > gutter {
+            // A sentence beside a pair of listings can only be above or below them.
+            let spansBoth =
+                (line.rect.minX < gutter && line.rect.maxX > gutter)
+                || (isListingPair && !isListingLine(line))
+            if spansBoth {
                 flushBand()
                 ordered.append(line)
             } else if line.rect.maxX <= gutter {
@@ -79,11 +88,25 @@ public enum ReadingOrder {
         let left = lines.filter { $0.rect.maxX <= gutter }
         let right = lines.filter { $0.rect.minX >= gutter }
         guard left.count >= minimumLinesPerColumn, right.count >= minimumLinesPerColumn,
-            averageWidth(left) >= textWidth * minimumColumnWidthShare,
-            averageWidth(right) >= textWidth * minimumColumnWidthShare,
             sharedRowCount(left, right) >= minimumSharedRows
         else { return nil }
-        return gutter
+        let hasWideColumns =
+            averageWidth(left) >= textWidth * minimumColumnWidthShare
+            && averageWidth(right) >= textWidth * minimumColumnWidthShare
+        return hasWideColumns || isListingPair(left, right) ? gutter : nil
+    }
+
+    /// Two listings side by side, as in a book comparing two languages. Short lines of code aren't
+    /// labels at the side of a page, and read across they would be two programs woven together.
+    private static func isListingPair(_ left: [TextLine], _ right: [TextLine]) -> Bool {
+        let leftCode = left.filter(isListingLine)
+        let rightCode = right.filter(isListingLine)
+        return leftCode.count >= minimumLinesPerColumn && rightCode.count >= minimumLinesPerColumn
+            && sharedRowCount(leftCode, rightCode) >= minimumSharedRows
+    }
+
+    private static func isListingLine(_ line: TextLine) -> Bool {
+        line.isMonospace || (line.words.count == 1 && TextLine.isPlainNumber(line.words[0]))
     }
 
     /// Centers on the empty strip, so a line ending just before the first candidate x stays left.
