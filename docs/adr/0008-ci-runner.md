@@ -44,7 +44,8 @@ If OCR tests can't run on the VM, they are skipped on CI through an explicit env
 variable, and the README says so. CI is never made green by hiding a real failure.
 
 Measured on the first CI run with OCR: every real Vision request fails within about 2 s on
-this image, while lint, build and all other tests pass. So the workflow sets
+this image with `TextRecognition.CRImageReaderError error 9`, while lint, build and all other
+tests pass. So the workflow sets
 `PDF2MD_CI_NO_VISION`, which skips the tests that need real Vision, including the goldens
 with tables. A separate informational step converts a fixture and prints the error each run.
 OCR, tables and those goldens are only verified locally, through `make test`.
