@@ -165,6 +165,52 @@ public final class JobHandle {
         }
     }
 
+    /// Stops every running job and removes its partial output. Returns how many there were.
+    /// SIGTERM lets a supervisor clean up after itself and report. Only one that doesn't finish
+    /// in time gets SIGKILL, and then this process cleans up for it. Deleting waits for the job's
+    /// lock, which is free only when no process of that job can still write.
+    public static func cancelRunning(paths: RuntimePaths) -> Int {
+        sweepStale(paths: paths)
+        let jobs = existingJobs(paths: paths)
+        for job in jobs { signal(job, files: [pidName], number: SIGTERM) }
+        for job in jobs {
+            if waitForRelease(of: job, paths: paths, seconds: cancelGraceSeconds) { continue }
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: job.path)) ?? []
+            signal(job, files: names.filter { $0.hasSuffix(".pid") }, number: SIGKILL)
+            _ = waitForRelease(of: job, paths: paths, seconds: cancelGraceSeconds)
+        }
+        return jobs.count
+    }
+
+    /// Generous, since a supervisor moves its finished files out before it exits.
+    private static let cancelGraceSeconds = 10.0
+
+    private static func signal(_ job: URL, files: [String], number: Int32) {
+        for file in files {
+            let url = job.appendingPathComponent(file)
+            guard let text = try? String(contentsOf: url, encoding: .utf8),
+                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1
+            else { continue }
+            kill(pid, number)
+        }
+    }
+
+    /// True once the job's processes are gone and its directory is cleaned.
+    private static func waitForRelease(of job: URL, paths: RuntimePaths, seconds: Double) -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        let lockFile = job.appendingPathComponent(lockName)
+        while Date() < deadline {
+            guard FileManager.default.fileExists(atPath: lockFile.path) else { return true }
+            if let lock = try? FileSlot(url: lockFile), lock.tryLockExclusively() {
+                clean(job: job, paths: paths)
+                lock.unlock()
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return false
+    }
+
     static func existingJobs(paths: RuntimePaths) -> [URL] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.jobs.path)) ?? []
         return names.filter { !$0.hasPrefix(".") }.map {

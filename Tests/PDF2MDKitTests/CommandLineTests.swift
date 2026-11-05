@@ -281,3 +281,144 @@ struct FuzzSmokeTests {
         #expect(try workspace.names(in: jobs).isEmpty)
     }
 }
+
+@Suite("Notification text")
+struct NotificationTextTests {
+    private func outcome(_ name: String, error: String? = nil) -> FileOutcome {
+        FileOutcome(input: URL(fileURLWithPath: "/tmp/\(name)"), error: error)
+    }
+
+    private func summary(_ outcomes: [FileOutcome]) -> RunSummary {
+        RunSummary(outcomes: outcomes, duration: 134)
+    }
+
+    @Test("the start names the count, in the singular too")
+    func started() {
+        #expect(NotificationText.started(fileCount: 3) == "Converting 3 PDFs…")
+        #expect(NotificationText.started(fileCount: 1) == "Converting 1 PDF…")
+    }
+
+    @Test("the end has the headline, and failures with short reasons")
+    func finished() {
+        let text = NotificationText.finished(
+            summary([outcome("a.pdf"), outcome("b.pdf", error: "password-protected")])
+        )
+        #expect(text == "Converted 1 of 2 in 2m 14s\nb.pdf: password-protected")
+    }
+
+    @Test("failures that don't fit point to the log instead")
+    func tooMany() {
+        let failures = (0..<40).map {
+            outcome("file-\($0).pdf", error: "corrupt or unreadable PDF")
+        }
+        let text = NotificationText.finished(summary(failures))
+        #expect(text.count <= 200)
+        #expect(text.hasPrefix("Converted 0 of 40"))
+        #expect(text.contains("file-0.pdf"))
+        #expect(text.hasSuffix("Details: ~/Library/Logs/pdf2md/pdf2md.log"))
+    }
+
+    @Test("a fallback to Downloads is mentioned, and cancelled files aren't failures to list")
+    func others() {
+        var moved = outcome("a.pdf")
+        moved.didFallBack = true
+        let text = NotificationText.finished(
+            summary([moved, outcome("b.pdf", error: "cancelled")])
+        )
+        #expect(text.contains("saved to Downloads"))
+        #expect(!text.contains("b.pdf"))
+    }
+}
+
+@Suite("Detach and cancel", .serialized)
+struct DetachAndCancelTests {
+    /// A stub that records each notification, standing in for `osascript`.
+    private func installStub(in workspace: Workspace) throws -> (path: String, log: URL) {
+        let log = workspace.root.appendingPathComponent("notifications.txt")
+        let script = workspace.root.appendingPathComponent("osascript-stub")
+        let text = """
+            #!/bin/sh
+            for last; do :; done
+            printf '%s\\n--\\n' "$last" >> "\(log.path)"
+            """
+        try text.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        return (script.path, log)
+    }
+
+    private func waitUntil(seconds: Double = 60, _ condition: () throws -> Bool) rethrows -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            if try condition() { return true }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return false
+    }
+
+    private func longFixture() throws -> Fixture {
+        try LongDocumentFixture.make(name: "long.pdf", pages: 500)
+    }
+
+    @Test("--detach returns at once, the job goes on, and notifications come at both ends")
+    func detach() throws {
+        let workspace = try Workspace(fixtures: [try longFixture()])
+        defer { workspace.remove() }
+        let stub = try installStub(in: workspace)
+        var environment = workspace.environment
+        environment["PDF2MD_OSASCRIPT"] = stub.path
+
+        let started = Date()
+        let result = try TestProcess.runCLI(
+            [workspace.path("long.pdf"), "--detach", "--notify"],
+            environment: environment
+        )
+        #expect(result.status == 0)
+        #expect(Date().timeIntervalSince(started) < 3)
+        #expect(!(try workspace.names().contains("long.md")))
+
+        let isDone = waitUntil {
+            ((try? String(contentsOf: stub.log, encoding: .utf8)) ?? "").contains("Converted")
+        }
+        #expect(isDone)
+        #expect(try workspace.names().contains("long.md"))
+        let text = try String(contentsOf: stub.log, encoding: .utf8)
+        #expect(text.hasPrefix("Converting 1 PDF…\n--\n"))
+        #expect(text.contains("Converted 1 of 1 in"))
+    }
+
+    @Test("--cancel stops a detached job and leaves no partial output, and a file name stays argv")
+    func cancel() throws {
+        let original = try longFixture()
+        let name = #"long "quoted" & more.pdf"#
+        let fixture = Fixture(fileName: name, data: original.data, truth: nil)
+        let workspace = try Workspace(fixtures: [fixture])
+        defer { workspace.remove() }
+
+        let detached = try TestProcess.runCLI(
+            [workspace.path(name), "--detach"],
+            environment: workspace.environment
+        )
+        #expect(detached.status == 0)
+
+        let cancelled = try TestProcess.runCLI(["--cancel"], environment: workspace.environment)
+        #expect(cancelled.status == 0)
+        #expect(cancelled.stdout.contains("Cancelled 1"))
+
+        #expect(try workspace.names() == [name, "home"])
+        let jobs = workspace.home.appendingPathComponent("jobs")
+        #expect(try workspace.names(in: jobs).isEmpty)
+
+        let again = try TestProcess.runCLI(["--cancel"], environment: workspace.environment)
+        #expect(again.stdout.contains("Nothing to cancel"))
+    }
+
+    @Test("--cancel never deletes an output that an earlier run finished")
+    func cancelKeepsFinished() throws {
+        let workspace = try Workspace(fixtures: [try TestFixtures.named("book.pdf")])
+        defer { workspace.remove() }
+        _ = try TestProcess.runCLI([workspace.path("book.pdf")], environment: workspace.environment)
+        let cancelled = try TestProcess.runCLI(["--cancel"], environment: workspace.environment)
+        #expect(cancelled.status == 0)
+        #expect(try workspace.names().contains("book.md"))
+    }
+}

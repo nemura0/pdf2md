@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// Spawns this executable again, for per-file children and for `--detach`.
-enum ProcessSpawner {
+public enum ProcessSpawner {
     struct Child {
         let pid: pid_t
         let events: Int32
@@ -44,6 +44,38 @@ enum ProcessSpawner {
         close(control.read)
         close(events.write)
         return Child(pid: pid, events: events.read, control: control.write)
+    }
+
+    /// Starts this executable again in its own session, so it outlives the Quick Action, with
+    /// nothing inherited but a pipe at `readyDescriptor`. Returns once that pipe closes, which the
+    /// new process does when its job is registered, so an immediate `--cancel` can't miss it.
+    public static func spawnDetached(arguments: [String], readyDescriptor: Int32) throws {
+        let ready = try makePipe()
+        var actions = try makeActions()
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_adddup2(&actions, ready.write, readyDescriptor)
+
+        do {
+            _ = try spawn(
+                arguments: arguments,
+                actions: &actions,
+                flags: Int32(POSIX_SPAWN_SETSID)
+            )
+        } catch {
+            close(ready.read)
+            close(ready.write)
+            throw error
+        }
+        close(ready.write)
+        var byte: UInt8 = 0
+        while true {
+            let count = read(ready.read, &byte, 1)
+            if count >= 0 || errno != EINTR { break }
+        }
+        close(ready.read)
     }
 
     private static func spawn(

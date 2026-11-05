@@ -39,19 +39,23 @@ public struct RunRequest: Sendable {
     public var jobs: Int
     public var isVerbose: Bool
     public var showsProgress: Bool
+    /// Runs once the job is registered and `--cancel` can see it.
+    public var onRegistered: @Sendable () -> Void
 
     public init(
         files: [URL],
         options: ConvertOptions,
         jobs: Int?,
         isVerbose: Bool,
-        showsProgress: Bool
+        showsProgress: Bool,
+        onRegistered: @escaping @Sendable () -> Void = {}
     ) {
         self.files = files
         self.options = options
         self.jobs = jobs ?? Supervisor.defaultPageLimit
         self.isVerbose = isVerbose
         self.showsProgress = showsProgress
+        self.onRegistered = onRegistered
     }
 }
 
@@ -89,6 +93,7 @@ public enum Supervisor {
             let outcomes = request.files.map {
                 FileOutcome(input: $0, error: "couldn't start: \(error.localizedDescription)")
             }
+            request.onRegistered()
             return RunSummary(outcomes: outcomes, duration: 0)
         }
         defer { job.finish() }
@@ -112,6 +117,8 @@ public enum Supervisor {
         )
         let signals = run.handleSignals()
         defer { signals.forEach { $0.cancel() } }
+        // Only now, so a `--cancel` right after this reaches a process that handles it.
+        request.onRegistered()
 
         let outcomes = await convertAll(run)
         let summary = RunSummary(outcomes: outcomes, duration: Date().timeIntervalSince(started))

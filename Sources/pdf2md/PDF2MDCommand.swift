@@ -47,6 +47,10 @@ struct PDF2MDCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Print per-file statistics.")
     var verbose = false
 
+    /// Set by `--detach` on the process it starts. Closing this tells the parent to return.
+    @Option(name: .long, help: .hidden)
+    var readyFd: Int32?
+
     @Argument(help: "PDF files to convert.", completion: .file(extensions: ["pdf"]))
     var files: [String] = []
 
@@ -63,6 +67,16 @@ struct PDF2MDCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if cancel {
+            let count = JobHandle.cancelRunning(paths: .current())
+            print(count == 0 ? "Nothing to cancel." : "Cancelled \(count) running job(s).")
+            return
+        }
+        if detach {
+            try detachFromSession()
+            return
+        }
+        let notifier: (any Notifying)? = notify ? OsascriptNotifier() : nil
         let options = ConvertOptions(
             outputDirectory: outputDir.map { URL(fileURLWithPath: $0, isDirectory: true) },
             overwrite: overwrite,
@@ -77,10 +91,27 @@ struct PDF2MDCommand: AsyncParsableCommand {
                 options: options,
                 jobs: jobs,
                 isVerbose: verbose,
-                showsProgress: true
+                showsProgress: true,
+                onRegistered: { [readyFd, files] in
+                    if let readyFd { close(readyFd) }
+                    notifier?.send(NotificationText.started(fileCount: files.count))
+                }
             )
         )
+        notifier?.send(NotificationText.finished(summary))
         throw summary.isCompleteSuccess ? ExitCode.success : ExitCode.failure
+    }
+
+    /// Starts the same command in a new session and returns. The caller's arguments go as they
+    /// are, minus the flag itself, and relative paths still work since the directory is inherited.
+    private func detachFromSession() throws {
+        var arguments = Array(CommandLine.arguments.dropFirst())
+        if let flag = arguments.firstIndex(of: "--detach") { arguments.remove(at: flag) }
+        let descriptor: Int32 = 3
+        try ProcessSpawner.spawnDetached(
+            arguments: ["--ready-fd", String(descriptor)] + arguments,
+            readyDescriptor: descriptor
+        )
     }
 
     /// Replaces ArgumentParser's default entry point, because usage errors must exit with 2,
