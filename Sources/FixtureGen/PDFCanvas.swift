@@ -110,8 +110,8 @@ enum PDFNormalizer {
 
     static func fixVolatileFields(in pdf: Data, label: String) -> Data {
         var bytes = pdf
-        overwriteDigits(in: &bytes, after: "/CreationDate (D:")
-        overwriteDigits(in: &bytes, after: "/ModDate (D:")
+        overwriteDigits(in: &bytes, after: "/CreationDate")
+        overwriteDigits(in: &bytes, after: "/ModDate")
         overwriteIdentifiers(in: &bytes, label: label)
         return bytes
     }
@@ -130,10 +130,13 @@ enum PDFNormalizer {
         return bytes
     }
 
-    private static func overwriteDigits(in bytes: inout Data, after marker: String) {
+    /// CoreGraphics may wrap the line between a key and its value, so find the value separately.
+    private static func overwriteDigits(in bytes: inout Data, after key: String) {
         var searchStart = bytes.startIndex
-        while let range = bytes.range(of: Data(marker.utf8), in: searchStart..<bytes.endIndex) {
-            let digits = range.upperBound..<(range.upperBound + fixedDateDigits.count)
+        while let keyRange = bytes.range(of: Data(key.utf8), in: searchStart..<bytes.endIndex),
+            let value = bytes.range(of: Data("(D:".utf8), in: keyRange.upperBound..<bytes.endIndex)
+        {
+            let digits = value.upperBound..<(value.upperBound + fixedDateDigits.count)
             guard digits.upperBound <= bytes.endIndex else { return }
             bytes.replaceSubrange(digits, with: fixedDateDigits)
             searchStart = digits.upperBound

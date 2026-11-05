@@ -7,7 +7,7 @@ verified by running something.
 |---|---|---|---|
 | P1 | Conventions, `CLAUDE.md`, ADRs 0001 to 0008, `.claude/` agents and commands | Docs reviewed against the code that exists | In progress |
 | P2 | Package, CLI with exit codes, Makefile and scripts, `FixtureGen` with ground truth, CI | Every Makefile target runs from a path with spaces, first CI run | |
-| P3 | Scanner, extractor, layout, structure, writer, worker pool, spool, emit, supervisor, log, bench | Goldens and recall green, footprint flat at 175/350/700/1400 pages | |
+| P3 | Scanner, extractor, layout, structure, writer, worker pool, spool, emit, supervisor, log, bench | Goldens and recall green, footprint flat at 175/350/700/1400 pages | Done 2026-11-05: 101 tests, 1400 pages at 222 MB against 212 MB at 700 |
 | P4 | OCR and tables, then images, then math | Goldens extended, fuzz smoke clean, bench flat on a scanned 700-page file | |
 | P5 | Quick Action, installer, detach, notifications, cancel, README | `scripts/e2e.sh` green on the installed workflow, final bench | |
 | P6 | Audit, Dependabot, release `v1.0.0`, ruleset, go public | CI watched, owner's OK before the visibility change | |

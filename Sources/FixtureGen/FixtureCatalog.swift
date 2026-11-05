@@ -1,7 +1,7 @@
 import Foundation
 
 /// A generated document and what a correct conversion must contain.
-struct Fixture {
+struct Fixture: Sendable {
     let fileName: String
     let data: Data
     let truth: GroundTruth?

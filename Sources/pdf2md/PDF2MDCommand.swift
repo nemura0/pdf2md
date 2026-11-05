@@ -63,12 +63,33 @@ struct PDF2MDCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        throw ExitCode.failure
+        let options = ConvertOptions(
+            outputDirectory: outputDir.map { URL(fileURLWithPath: $0, isDirectory: true) },
+            overwrite: overwrite,
+            includeImages: !noImages,
+            includePageMarkers: !noPageMarkers,
+            includeFrontMatter: !noFrontMatter,
+            ocrMode: ocr
+        )
+        let summary = await Supervisor.run(
+            RunRequest(
+                files: files.map { URL(fileURLWithPath: $0) },
+                options: options,
+                jobs: jobs,
+                isVerbose: verbose,
+                showsProgress: true
+            )
+        )
+        throw summary.isCompleteSuccess ? ExitCode.success : ExitCode.failure
     }
 
     /// Replaces ArgumentParser's default entry point, because usage errors must exit with 2,
     /// not the default 64 (EX_USAGE).
     static func main() async {
+        let arguments = CommandLine.arguments
+        if arguments.count == 3, arguments[1] == ChildRequest.argument {
+            await ConversionChild.run(json: arguments[2])
+        }
         do {
             var command = try parseAsRoot()
             if var asyncCommand = command as? any AsyncParsableCommand {

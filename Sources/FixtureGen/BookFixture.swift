@@ -371,7 +371,7 @@ enum BookFixture {
                 .math("𝛼 ≤ 𝑥"), .superscript("2"), .text(" holds for every step "),
                 .math("𝑥"), .subscript("𝑖"), .text("."),
             ],
-            fragments: ["\\alpha", "\\leq", "x^{2}", "x_{i}"]
+            fragments: ["\\alpha", "\\leq", "x^2", "x_i"]
         )
         book.paragraph(
             """
@@ -383,14 +383,14 @@ enum BookFixture {
             [
                 .math("𝑓(𝑥) = 𝛼𝑥"), .superscript("2"), .math(" + 𝛽𝑥 + 𝛾"),
             ],
-            fragments: ["f(x)", "\\alpha", "x^{2}", "\\beta", "\\gamma"]
+            fragments: ["f(x)", "\\alpha", "x^2", "\\beta", "\\gamma"]
         )
         book.displayMath(
             [
                 .math("𝑇"), .subscript("𝑛"), .math(" ≠ ∅ ⇒ ∑ 𝑖"), .superscript("2"),
                 .math(" ≥ 0"),
             ],
-            fragments: ["T_{n}", "\\neq", "\\emptyset", "\\Rightarrow", "\\sum", "\\geq"]
+            fragments: ["T_n", "\\neq", "\\emptyset", "\\Rightarrow", "\\sum", "\\geq"]
         )
         book.stackedFraction(prefix: "𝑅 =", numerator: "𝑛 + 1", denominator: "2𝑛 − 1")
         book.paragraph(

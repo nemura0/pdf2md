@@ -7,13 +7,14 @@ import Testing
 @Suite("FixtureGen")
 struct FixtureGenTests {
     private func fixture(_ name: String) throws -> Fixture {
-        let all = try FixtureCatalog.core()
+        let all = try TestFixtures.core()
         return try #require(all.first { $0.fileName == name })
     }
 
     @Test("generating twice gives identical bytes, except the salted encrypted file")
     func deterministic() throws {
-        let first = try FixtureCatalog.core()
+        // The shared set goes first, so this is the only generation running in the process.
+        let first = try TestFixtures.core()
         let second = try FixtureCatalog.core()
         #expect(first.count == second.count)
         for (a, b) in zip(first, second) where a.fileName != "encrypted.pdf" {
