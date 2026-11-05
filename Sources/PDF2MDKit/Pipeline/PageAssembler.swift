@@ -17,10 +17,16 @@ struct PageAssembler {
     }
 
     func blocks(for record: PageRecord, namer: inout FigureNamer) -> [Block] {
-        let lines = LineBuilder.lines(from: record.words).filter { line in
+        let content = LineBuilder.lines(from: record.words).filter { line in
             !profile.isRunningMargin(line, pageHeight: record.height)
                 && !isTitleLine(line, in: record)
         }
+        guard record.isSlide || !TableOfContents.isListing(content) else { return [] }
+        let lines = OutlineMatcher.marking(
+            content,
+            with: profile.outlineEntries(onPage: record.index),
+            minimumSize: profile.minimumHeadingSize
+        )
         let tables = record.tables.map {
             PageObject(rect: $0.rect, blocks: [.table($0.rows)], coversText: true)
         }

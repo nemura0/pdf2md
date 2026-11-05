@@ -259,6 +259,7 @@ public struct DocumentConverter: Sendable {
         let profile = try buildProfile(
             pageCount: summary.pageCount,
             metadataTitle: summary.metadataTitle,
+            outline: summary.outline,
             fileName: fileName,
             spool: spool
         )
@@ -326,10 +327,11 @@ public struct DocumentConverter: Sendable {
     private func buildProfile(
         pageCount: Int,
         metadataTitle: String?,
+        outline: [OutlineEntry],
         fileName: String,
         spool: PageSpool
     ) throws -> DocumentProfile {
-        var builder = ProfileBuilder(pageCount: pageCount)
+        var builder = ProfileBuilder(pageCount: pageCount, outline: outline)
         for page in 0..<pageCount {
             try autoreleasepool {
                 let record = try spool.read(page: page)

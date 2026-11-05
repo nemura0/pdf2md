@@ -6,6 +6,7 @@ import PDFKit
 public struct PDFSummary: Sendable, Equatable {
     public var pageCount: Int
     public var metadataTitle: String?
+    public var outline: [OutlineEntry] = []
 }
 
 /// Checks a file before any output is reserved. Runs in the file's child process, because a
@@ -35,7 +36,11 @@ public enum Preflight {
             if document.isLocked { throw ConversionFailure("password-protected") }
             guard document.pageCount > 0 else { throw ConversionFailure("the PDF has no pages") }
             let title = document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
-            return PDFSummary(pageCount: document.pageCount, metadataTitle: title)
+            return PDFSummary(
+                pageCount: document.pageCount,
+                metadataTitle: title,
+                outline: OutlineReader.entries(of: document)
+            )
         }
     }
 

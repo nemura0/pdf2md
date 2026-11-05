@@ -20,6 +20,8 @@ enum FixtureCatalog {
             try EmojiNameFixture.make(),
             RawFixtures.pdfTeXStyle(),
             LaTeXBookFixture.make(),
+            OutlineBookFixture.make(hasOutline: true),
+            OutlineBookFixture.make(hasOutline: false),
             RawFixtures.rotated(),
             RawFixtures.zeroPages(),
             RawFixtures.corrupt(),

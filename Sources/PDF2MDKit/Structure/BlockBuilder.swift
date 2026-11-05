@@ -42,7 +42,9 @@ public struct BlockBuilder: Sendable {
 
         for (index, line) in lines.enumerated() {
             let next = index + 1 < lines.count ? lines[index + 1] : nil
-            if state.isWrappedCode(line, next: next) {
+            if let level = line.outlineLevel {
+                state.addOutlineHeading(line, level: level)
+            } else if state.isWrappedCode(line, next: next) {
                 state.addWrappedCode(line)
             } else if line.isMonospace || isBlankListingLine(at: index, in: lines) {
                 state.addCode(line)
@@ -108,12 +110,12 @@ public struct BlockBuilder: Sendable {
         if isSlidePage {
             // `##` is reserved for slide titles, and slides set much of their text large, so a
             // large line that reads as a sentence is text.
-            guard let level = profile.headingLevel(forSize: line.size),
+            guard let level = profile.headingLevel(for: line),
                 let last = line.text.last, !".,;:".contains(last)
             else { return nil }
             return max(level, 3)
         }
-        if let level = profile.headingLevel(forSize: line.size) { return level }
+        if let level = profile.headingLevel(for: line) { return level }
         if line.isBold, abs(line.size - profile.bodySize) < 1,
             line.text.count <= Self.maximumBoldHeadingLength,
             let last = line.text.last, !".,;:".contains(last)
@@ -333,6 +335,17 @@ public struct BlockBuilder: Sendable {
                 flushHeading()
                 heading = (level, text, line)
             }
+        }
+
+        /// The outline already joined this heading's lines, and the next heading is another one
+        /// however close it sits.
+        mutating func addOutlineHeading(_ line: TextLine, level: Int) {
+            flushParagraph()
+            flushCode()
+            flushList()
+            flushHeading()
+            heading = (level, InlineRenderer.render(line: line), line)
+            flushHeading()
         }
 
         mutating func flushHeading() {

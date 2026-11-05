@@ -71,10 +71,11 @@ public struct MarginTracker: Sendable {
 
     public init(pageCount: Int) {
         self.pageCount = pageCount
-        self.threshold = max(
-            Self.minimumPages,
-            Int((Double(pageCount) * Self.repeatShare).rounded(.up))
-        )
+        self.threshold = Self.threshold(forPageCount: pageCount)
+    }
+
+    static func threshold(forPageCount pageCount: Int) -> Int {
+        max(minimumPages, Int((Double(pageCount) * repeatShare).rounded(.up)))
     }
 
     public mutating func add(page: Int, keys: [String], isLandscape: Bool) {

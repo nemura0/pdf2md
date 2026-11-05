@@ -1,7 +1,8 @@
 /// Writes blocks across page boundaries, holding back a page's last paragraph in case the next
 /// page continues it. Word-processor documents and books split paragraphs at page breaks all the
 /// time, and a marker in mid-sentence costs an LLM the sentence. Markers passed while a paragraph
-/// is held come right after it.
+/// is held come right after it. A page with nothing on it, such as LaTeX's blank left-hand pages,
+/// has no marker: there is nothing for one to point at.
 struct PageFlow {
     private var held: String?
     private var pendingMarkers: [String] = []
@@ -12,6 +13,7 @@ struct PageFlow {
         to stream: inout MarkdownStream
     ) throws {
         var remaining = blocks[...]
+        guard !blocks.isEmpty else { return }
         if let marker = pageMarker { pendingMarkers.append(marker) }
         if let text = held, case .paragraph(let next)? = remaining.first,
             Self.continues(text, with: next)

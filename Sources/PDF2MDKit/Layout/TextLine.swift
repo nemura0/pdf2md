@@ -21,9 +21,12 @@ public struct TextLine: Sendable, Equatable {
     public let isBold: Bool
     public let isMonospace: Bool
     public let text: String
+    /// Set when the PDF's outline names this line as a heading of that level (ADR-0009).
+    public var outlineLevel: Int?
 
     public init(words: [Word]) {
         self.words = words
+        self.outlineLevel = nil
         let hasLineNumber = words.count >= 2 && Self.isLineNumber(words[0], before: words[1])
         self.lineNumber = hasLineNumber ? words[0] : nil
         self.contentWords = hasLineNumber ? Array(words.dropFirst()) : words

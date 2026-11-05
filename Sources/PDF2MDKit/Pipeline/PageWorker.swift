@@ -98,12 +98,18 @@ actor PageWorker {
             matchedWords: text.matched,
             unmatchedWords: text.unmatched
         )
-        let plan = PageRecognition.plan(
+        var plan = PageRecognition.plan(
             for: record,
             rules: trace.rules,
             figures: trace.figures,
-            mode: options.ocrMode
+            mode: options.ocrMode,
+            isBlank: trace.isBlank
         )
+        // A text layer that needs OCR is what a ruled table would have to fill its cells from.
+        if !plan.needsOCR {
+            record.tables = RuledTables.find(rules: trace.rules, words: text.words)
+            plan.needsTables = plan.needsTables && record.tables.isEmpty
+        }
         let figures =
             options.includeImages
             ? FigureFilter.kept(trace.figures, pageSize: geometry.size, isOCR: plan.needsOCR)
