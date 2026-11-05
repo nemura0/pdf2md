@@ -10,12 +10,28 @@ public enum LineBuilder {
     private static let columnGap = 1.6
     /// Words closer than this with the same text are one word drawn twice for fake bold.
     private static let duplicateTolerance = 1.5
+    /// Copies drawn on top of each other come out of PDFKit as one word that's twice as long and
+    /// no wider. Measured on a real book: 0.245 font sizes per letter, where about 0.5 is normal.
+    private static let overprintWidthShare = 0.35
+    private static let minimumOverprintLength = 6
 
     public static func lines(from words: [Word]) -> [TextLine] {
-        clusters(of: words).flatMap { cluster -> [TextLine] in
+        clusters(of: words.map(collapsingOverprint)).flatMap { cluster -> [TextLine] in
             let sorted = cluster.sorted { $0.rect.minX < $1.rect.minX }
             return segments(of: removingDuplicates(sorted)).map(TextLine.init(words:))
         }
+    }
+
+    private static func collapsingOverprint(_ word: Word) -> Word {
+        let count = word.text.count
+        guard count >= minimumOverprintLength, count.isMultiple(of: 2),
+            word.rect.width < Double(count) * word.size * overprintWidthShare
+        else { return word }
+        let half = String(word.text.prefix(count / 2))
+        guard word.text.hasSuffix(half) else { return word }
+        var single = word
+        single.text = half
+        return single
     }
 
     /// Groups words into vertical bands. The band follows the largest word seen so far, so a
