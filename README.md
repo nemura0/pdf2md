@@ -262,9 +262,14 @@ conventions and invariants are in [`CLAUDE.md`](CLAUDE.md).
 
 ### CI
 
-CI runs lint, build and the test suite on GitHub's `xcode-27` image, including the Vision tests. It
-doesn't run `scripts/e2e.sh` or `make bench`, because those need a real install, a logged-in session
-and the Services menu. Run them locally.
+CI runs lint, build and tests on GitHub's `xcode-27` image, but it can't verify OCR or tables. The
+code builds there, but real Vision requests fail on that virtual machine, so the tests that need them
+are skipped: OCR, table extraction and the goldens with tables. A separate step prints the Vision
+error on each run and doesn't affect the result. Vision behaviour is covered by the same tests locally,
+so run `make test` on a Mac before trusting a change to those paths.
+
+CI also doesn't run `scripts/e2e.sh` or `make bench`, because those need a real install, a logged-in
+session and the Services menu.
 
 ## Roadmap
 

@@ -66,7 +66,10 @@ struct RecognitionTests {
             }
     }
 
-    @Test("a scanned book comes through OCR with its words, title and structure")
+    @Test(
+        "a scanned book comes through OCR with its words, title and structure",
+        .enabled(if: CIEnvironment.hasVision, "needs real Vision")
+    )
     func scanned() async throws {
         let fixture = try fixture("scanned.pdf")
         let truth = try #require(fixture.truth)
@@ -99,7 +102,10 @@ struct RecognitionTests {
         #expect(!markdown.contains("Introduction"))
     }
 
-    @Test("--ocr always reads a page with a text layer through Vision, upright when rotated")
+    @Test(
+        "--ocr always reads a page with a text layer through Vision, upright when rotated",
+        .enabled(if: CIEnvironment.hasVision, "needs real Vision")
+    )
     func always() async throws {
         let harness = try ConversionHarness()
         defer { harness.cleanUp() }
@@ -151,7 +157,10 @@ struct RecognitionTests {
         #expect(report.stats.firstNote?.contains("OCR failed") == true)
     }
 
-    @Test("born-digital tables become GFM tables, with exact text from the text layer")
+    @Test(
+        "born-digital tables become GFM tables, with exact text from the text layer",
+        .enabled(if: CIEnvironment.hasVision, "needs real Vision")
+    )
     func tables() async throws {
         for name in ["book.pdf", "slides.pdf"] {
             let fixture = try fixture(name)
@@ -177,7 +186,10 @@ struct RecognitionTests {
         #expect(markdown.components(separatedBy: "Search unsorted").count == 2)
     }
 
-    @Test("a table is placed between the text around it")
+    @Test(
+        "a table is placed between the text around it",
+        .enabled(if: CIEnvironment.hasVision, "needs real Vision")
+    )
     func placement() async throws {
         let harness = try ConversionHarness()
         defer { harness.cleanUp() }

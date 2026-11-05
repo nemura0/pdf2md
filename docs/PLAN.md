@@ -21,7 +21,8 @@ Key decisions are in [`docs/adr/`](adr/).
 - Memory slope across page counts. Text: flat, 214 to 218 MB from 700 to 1400 pages. Scanned: slowing,
   726, 851 and 913 MB at 300, 700 and 1400 pages, and physical footprint doesn't climb during a
   1400-page run. **Image-heavy documents are still open:** no fixture has many distinct images.
-- Whether goldens stay stable on the CI image. Answered by the first CI run with OCR.
+- Whether goldens stay stable on the CI image. Vision requests fail there, so goldens with tables
+  are skipped on CI (ADR-0008). The others are checked there.
 - Whether `automator` passes the environment through to the workflow's shell. **It doesn't.**
   `scripts/e2e.sh` runs a test copy of the workflow with the variables inline.
 - Whether a detached child survives the real service runner, not just the CLI. **It does:**

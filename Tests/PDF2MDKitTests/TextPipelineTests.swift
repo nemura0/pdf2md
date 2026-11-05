@@ -26,9 +26,23 @@ struct TextPipelineTests {
 
     @Test(
         "goldens match and hold the output invariants",
-        arguments: ["book.pdf", "book-cm.pdf", "slides.pdf", "pdftex-style.pdf", "rotated.pdf"]
+        arguments: ["pdftex-style.pdf", "rotated.pdf"]
     )
     func goldens(name: String) async throws {
+        try await checkGolden(name)
+    }
+
+    /// These hold tables, which only Vision finds.
+    @Test(
+        "goldens with tables match and hold the output invariants",
+        .enabled(if: CIEnvironment.hasVision, "needs real Vision"),
+        arguments: ["book.pdf", "book-cm.pdf", "slides.pdf"]
+    )
+    func goldensWithTables(name: String) async throws {
+        try await checkGolden(name)
+    }
+
+    private func checkGolden(_ name: String) async throws {
         let harness = try ConversionHarness()
         defer { harness.cleanUp() }
         let result = try await harness.convert(try fixture(name))

@@ -32,4 +32,18 @@ jobs:
       - name: Build
         run: make build
       - name: Test
+        env:
+          # Real Vision requests fail on this image. See docs/adr/0008-ci-runner.md.
+          PDF2MD_CI_NO_VISION: "1"
         run: make test
+      # Reports the reason Vision fails here, and shows when it starts working. A failure here
+      # doesn't fail the job, and the tests that need Vision were skipped above, not passed.
+      - name: Vision on this runner (informational)
+        continue-on-error: true
+        env:
+          PDF2MD_HOME: ${{ runner.temp }}/pdf2md-home
+        run: |
+          make fixtures
+          swift run --quiet pdf2md --output-dir "$RUNNER_TEMP" Fixtures/book.pdf
+          cat "$PDF2MD_HOME/logs/pdf2md.log"
+          ! grep -q 'note=' "$PDF2MD_HOME/logs/pdf2md.log"
