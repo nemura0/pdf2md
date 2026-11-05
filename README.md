@@ -8,14 +8,18 @@ documents into study material for LLMs, so it keeps the structure and drops the 
 
 ## Features
 
-- **Structure:** one `#` title, `##` to `####` headings, slide titles, nested lists, reflowed
-  paragraphs with hyphenation and ligatures repaired, and fenced code with its indentation rebuilt
-  from geometry.
-- **Tables:** GFM tables, with cell text taken from the PDF's text layer when it has one.
+- **Structure:** one `#` title, headings from `##` to `######` that follow the PDF's outline when
+  it has one, slide titles, nested lists, reflowed paragraphs with hyphenation and ligatures
+  repaired, and fenced code with its indentation rebuilt from geometry.
+- **Tables:** GFM tables, read from the rules a page draws or found by Apple Vision when it draws
+  none, with cell text taken from the PDF's text layer when it has one.
+- **Footnotes:** Markdown footnotes linked to their markers, so a note doesn't interrupt a sentence.
 - **Math:** `$…$` and `$$…$$` with sub and superscripts. A formula that can't be written reliably
   on one line, such as a stacked fraction, also gets a cropped image.
 - **Images:** figures cropped into `<name>_assets/`. Tiny images, page backgrounds, duplicates and
   images repeating on 30% of pages are left out.
+- **Diagrams:** drawings made of paths, such as TikZ, are cropped too. Their labels follow in a
+  `text` fence, placed by position, so a reader of the text alone still gets the words.
 - **OCR:** scanned pages go through Apple Vision, in English and Spanish.
 - **Token efficiency:** headers and footers repeating on 30% of pages are removed, along with
   double blank lines and trailing spaces. The only HTML is the `<!-- page N -->` marker.
@@ -218,9 +222,9 @@ size.
 
 ## Limitations
 
-The heuristics have been tuned and tested on generated PDFs only, including hand-written
-pdfTeX-style files with unregistered fonts. They have not been checked against a set of real
-documents, so expect rough edges on real LaTeX and Office files.
+The heuristics have been tuned on generated PDFs, including hand-written pdfTeX-style files with
+unregistered fonts, and on one real book: a 488-page LuaLaTeX textbook in Spanish. They have not been
+checked against a wider set of real documents, so expect rough edges, above all on Office files.
 
 - **Scanned pages:** OCR has no font information, so there is no bold, code isn't fenced and small
   headings can be read as text.
@@ -230,10 +234,17 @@ documents, so expect rough edges on real LaTeX and Office files.
   and may be "corrected" toward those two.
 - **Inline styles:** bold and italic inside a paragraph aren't kept.
 - **Math:** this is not ML-grade LaTeX. Stacked formulas become a best-effort linear form plus an
-  image. A space glyph set in a math font can shift where a word splits.
-- **Vector figures:** charts drawn directly in the page content, rather than as an image or a form,
-  aren't detected ([ADR-0004](docs/adr/0004-render-and-crop-images.md)).
-- **Monospace headings:** a large heading set in a monospace font becomes a code fence.
+  image. A fraction set at body size inside a display equation can flatten with no image. A space
+  glyph set in a math font can shift where a word splits.
+- **Diagrams:** the labels fence holds the words, not the arrows, so a relation between two boxes is
+  only in the image. Slides are skipped, and an unusual drawing can be missed or a framed paragraph
+  taken for one ([ADR-0010](docs/adr/0010-what-a-page-draws.md)).
+- **Footnotes:** they are found under a short rule, in small print with a raised marker. Notes in
+  another shape stay in the text, such as a table's own notes.
+- **Symbols with no text:** a symbol font with no text mapping can't be read. The check mark from
+  LaTeX's `bbding` is recognized, and any other symbol comes out as `■`.
+- **Monospace headings:** a large heading set in a monospace font becomes a code fence, unless the
+  PDF's outline names it.
 - **Zero-page PDFs:** these are reported as corrupt, because PDFKit and CoreGraphics both refuse to
   open them.
 - **Locked PDFs:** these are skipped with a reason, never cracked.

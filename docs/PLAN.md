@@ -16,8 +16,9 @@ Key decisions are in [`docs/adr/`](adr/).
 
 ## Things to measure, not assume
 
-- Trace match rate on real PDFs, including Type0 fonts with `/W`. **Still open:** no real samples
-  yet. Synthetic `pdftex-style` and `book-cm` fixtures pass.
+- Trace match rate on real PDFs, including Type0 fonts with `/W`. 100% on one real book, a 488-page
+  LuaLaTeX file (ADR-0009, ADR-0010). **Still open:** Office files and anything else real. Synthetic
+  `pdftex-style` and `book-cm` fixtures pass.
 - Memory slope across page counts. Text: flat, 214 to 218 MB from 700 to 1400 pages. Scanned: slowing,
   726, 851 and 913 MB at 300, 700 and 1400 pages, and physical footprint doesn't climb during a
   1400-page run. **Image-heavy documents are still open:** no fixture has many distinct images.
