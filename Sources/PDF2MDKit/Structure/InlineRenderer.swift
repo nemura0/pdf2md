@@ -49,10 +49,16 @@ public enum InlineRenderer {
             }
             flushCode()
             if !word.isGlued, !output.isEmpty { output += " " }
-            output += escape(TextNormalizer.normalize(word.text))
+            output += plain(word)
         }
         flushCode()
         return output
+    }
+
+    /// One word of running text, or the reference a footnote's marker has become.
+    static func plain(_ word: Word) -> String {
+        let text = escape(TextNormalizer.normalize(word.text))
+        return word.footnote.map { "[^\($0)]" + text } ?? text
     }
 
     /// CommonMark: the fence must differ from every backtick run inside, and a span that starts

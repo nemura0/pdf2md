@@ -76,7 +76,8 @@ public enum MathSpans {
     }
 
     private static func isConnector(_ word: Word) -> Bool {
-        word.text.count <= maximumConnectorLength && word.text.allSatisfy(connectors.contains)
+        word.footnote == nil && word.text.count <= maximumConnectorLength
+            && word.text.allSatisfy(connectors.contains)
     }
 
     /// Markdown for a line that contains math, or nil if it has none, so the caller's plain path
@@ -97,7 +98,7 @@ public enum MathSpans {
                 index = end + 1
             } else {
                 if !isFirst, !words[index].isGlued { output += " " }
-                output += InlineRenderer.escape(TextNormalizer.normalize(words[index].text))
+                output += InlineRenderer.plain(words[index])
                 index += 1
             }
         }
@@ -109,12 +110,13 @@ public enum MathSpans {
         blocks.reduce(0) { total, block in
             switch block {
             case .displayMath: total + 1
-            case .paragraph(let text), .heading(_, let text): total + inlineCount(in: text)
+            case .paragraph(let text), .heading(_, let text), .footnote(_, let text):
+                total + inlineCount(in: text)
             case .list(let items):
                 total + items.reduce(0) { $0 + inlineCount(in: $1.text) }
             case .table(let rows):
                 total + rows.joined().reduce(0) { $0 + inlineCount(in: $1) }
-            case .code, .figure: total
+            case .code, .labels, .figure: total
             }
         }
     }
@@ -141,7 +143,7 @@ public enum MathSpans {
     /// Which words are in a formula: math words, and connectors between or right after them. A
     /// sentence's final comma or period stays out.
     private static func spanMarks(_ words: [Word]) -> [Bool] {
-        var marks = words.map(isMath)
+        var marks = words.map { $0.footnote == nil && isMath($0) }
         guard marks.contains(true) else { return marks }
         var index = 0
         while index < words.count {

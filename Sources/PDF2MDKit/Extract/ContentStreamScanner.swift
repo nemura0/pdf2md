@@ -12,6 +12,8 @@ struct TextRun {
     var isHorizontal: Bool
     /// False when the font has no widths, so `endX` is only an estimate.
     var hasReliableEnd: Bool
+    /// The character codes shown, for a font whose glyphs have no text at all. See `SymbolGlyphs`.
+    var symbolCodes: [Int] = []
 }
 
 /// Everything one pass over a page's content stream finds.
@@ -22,6 +24,8 @@ struct PageTrace {
     /// Small filled squares, in display space. Often they're a list's bullets.
     var marks: [CGRect] = []
     var hasPaintedPaths = false
+    /// The bounds of every painted path, in display space, to find drawings by.
+    var shapes: [CGRect] = []
 
     /// Nothing drawn at all, the kind of page LaTeX leaves before a chapter.
     var isBlank: Bool { runs.isEmpty && figures.isEmpty && !hasPaintedPaths }
@@ -72,6 +76,8 @@ final class ScanState {
     static let maximumFormDepth = 12
     /// Malformed or huge pages can't make the record grow without limit.
     private static let maximumRules = 4000
+    /// Only a drawing's bounds need these, and past this a map has shown most of its extent.
+    private static let maximumShapes = 20000
     /// Depth limits alone allow ten Forms calling ten Forms, twelve levels deep.
     private static let maximumFormsPerPage = 4096
     private static let maximumStateDepth = 512
@@ -116,6 +122,8 @@ final class ScanState {
     private var subpathStart = CGPoint.zero
     private var pendingSegments: [(CGPoint, CGPoint)] = []
     private var pendingRects: [CGRect] = []
+    /// In user space, like the path, and turned into display space when it's painted.
+    private var pendingBounds: CGRect?
 
     init(geometry: DisplayGeometry, resources: CGPDFDictionaryRef?) {
         self.graphics = GraphicsState(ctm: geometry.transform)
@@ -194,6 +202,7 @@ final class ScanState {
     private struct PendingRun {
         var transform: CGAffineTransform
         var font: ResolvedFont
+        var symbolCodes: [Int] = []
     }
 
     private var pendingRun: PendingRun?
@@ -221,6 +230,7 @@ final class ScanState {
                 code = Int(bytes[index])
                 index += 1
             }
+            if font.hasNoTextMapping { pendingRun?.symbolCodes.append(code) }
             advance += font.advance(forCode: code) * graphics.fontSize + graphics.charSpacing
             if code == 32, !font.isTwoByte { advance += graphics.wordSpacing }
         }
@@ -260,7 +270,8 @@ final class ScanState {
                 size: size,
                 style: pending.font.style,
                 isHorizontal: isHorizontal,
-                hasReliableEnd: pending.font.hasReliableWidths
+                hasReliableEnd: pending.font.hasReliableWidths,
+                symbolCodes: pending.symbolCodes
             )
         )
     }
@@ -467,21 +478,31 @@ final class ScanState {
 
     // MARK: Paths
 
+    private func extendBounds(to point: CGPoint) {
+        let spot = CGRect(origin: point, size: .zero)
+        pendingBounds = pendingBounds?.union(spot) ?? spot
+    }
+
     func moveTo(_ point: CGPoint) {
         pathOps += 1
+        extendBounds(to: point)
         current = point
         subpathStart = point
     }
 
     func lineTo(_ point: CGPoint) {
         pathOps += 1
+        extendBounds(to: point)
         if pendingSegments.count < Self.maximumRules { pendingSegments.append((current, point)) }
         current = point
     }
 
-    func curveTo(_ point: CGPoint) {
+    /// A curve stays inside the hull of its control points, so those bound it safely. Its end
+    /// points alone would crop off the bulge of an arrow.
+    func curveTo(_ points: [CGPoint]) {
         pathOps += 1
-        current = point
+        points.forEach(extendBounds(to:))
+        if let end = points.last { current = end }
     }
 
     func closePath() {
@@ -493,6 +514,8 @@ final class ScanState {
 
     func addRect(_ rect: CGRect) {
         pathOps += 1
+        extendBounds(to: rect.origin)
+        extendBounds(to: CGPoint(x: rect.maxX, y: rect.maxY))
         if pendingRects.count < Self.maximumRules { pendingRects.append(rect) }
         current = rect.origin
         subpathStart = rect.origin
@@ -500,7 +523,10 @@ final class ScanState {
 
     func paintPath(strokes: Bool, fills: Bool) {
         defer { clearPath() }
-        if strokes || fills { trace.hasPaintedPaths = true }
+        if strokes || fills {
+            trace.hasPaintedPaths = true
+            addShape()
+        }
         guard trace.rules.count < Self.maximumRules else { return }
         if strokes {
             for (start, end) in pendingSegments { addRule(start, end) }
@@ -510,7 +536,17 @@ final class ScanState {
         }
     }
 
+    private func addShape() {
+        guard let bounds = pendingBounds, trace.shapes.count < Self.maximumShapes else { return }
+        let display = bounds.applying(graphics.ctm)
+        guard display.minX.isFinite, display.minY.isFinite, display.width.isFinite,
+            display.height.isFinite
+        else { return }
+        trace.shapes.append(display)
+    }
+
     func clearPath() {
+        pendingBounds = nil
         pendingSegments.removeAll(keepingCapacity: true)
         pendingRects.removeAll(keepingCapacity: true)
     }

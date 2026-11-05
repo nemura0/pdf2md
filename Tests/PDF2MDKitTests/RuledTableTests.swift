@@ -159,6 +159,40 @@ struct RuledTableTests {
         #expect(RuledTables.find(rules: rules, words: page).isEmpty)
     }
 
+    /// Two class boxes side by side, nearly touching, so their edges cover most of a frame.
+    @Test("two boxes in a diagram, joined by an arrow, aren't a table")
+    func twoBoxes() {
+        let box = { (left: Double, right: Double) in
+            [50.0, 62, 74, 86].map {
+                RuleSegment(startX: left, startY: $0, endX: right, endY: $0)
+            } + [left, right].map { RuleSegment(startX: $0, startY: 50, endX: $0, endY: 86) }
+        }
+        let arrow = RuleSegment(startX: 120, startY: 68, endX: 136, endY: 68)
+        let page =
+            words("App", x: 45, y: 59) + words("Sistema", x: 145, y: 59)
+            + words("sistema", x: 45, y: 71) + words("nombres", x: 145, y: 71)
+            + words("main", x: 45, y: 83) + words("leer", x: 145, y: 83)
+        let rules = box(40, 120) + box(136, 300) + [arrow]
+        #expect(RuledTables.find(rules: rules, words: page).isEmpty)
+    }
+
+    @Test("a column with no text at all isn't a column, so this is a drawing")
+    func emptyColumn() {
+        let rules = grid(xs: [40, 100, 200], ys: [50, 62, 74, 86])
+        let page =
+            words("Viaje", x: 45, y: 59) + words("fecha", x: 45, y: 71)
+            + words("hora", x: 45, y: 83)
+        #expect(RuledTables.find(rules: rules, words: page).isEmpty)
+    }
+
+    @Test("an array drawn with its indices above and empty cells is a drawing")
+    func drawnArray() {
+        let rules = grid(xs: [40, 60, 80, 100], ys: [50, 62, 70])
+        let page =
+            words("[0]", x: 42, y: 59) + words("[1]", x: 62, y: 59) + words("[2]", x: 82, y: 59)
+        #expect(RuledTables.find(rules: rules, words: page).isEmpty)
+    }
+
     @Test("a grid that's mostly empty is a drawing")
     func emptyGrid() {
         let rules = grid(xs: [40, 100, 160, 220], ys: [50, 62, 74, 86])
@@ -196,5 +230,64 @@ struct RuledTableTests {
             RuleSegment(startX: 0, startY: Double($0), endX: 100, endY: Double($0))
         }
         #expect(RuledTables.find(rules: rules, words: words("A", x: 5, y: 5)).isEmpty)
+    }
+}
+
+@Suite("Symbol glyphs")
+struct SymbolGlyphTests {
+    private func run(codes: [Int], x: Double, y: Double = 100, font: String = "bbding") -> TextRun {
+        TextRun(
+            originX: x,
+            endX: x + 10,
+            baseline: y,
+            size: 10,
+            style: FontStyle(name: font, isBold: false, isItalic: false, isMonospace: false),
+            isHorizontal: true,
+            hasReliableEnd: true,
+            symbolCodes: codes
+        )
+    }
+
+    @Test("a check mark with no text becomes a word where it was drawn")
+    func checkMark() throws {
+        let found = SymbolGlyphs.words(runs: [run(codes: [34], x: 140)], text: [])
+        let symbol = try #require(found.first)
+        #expect(symbol.text == "✔")
+        #expect(symbol.rect.minX == 140 && symbol.baseline == 100)
+    }
+
+    @Test("a symbol nothing is known about still leaves a mark")
+    func unknownSymbol() {
+        let found = SymbolGlyphs.words(runs: [run(codes: [7], x: 140, font: "wasy10")], text: [])
+        #expect(found.map(\.text) == ["■"])
+    }
+
+    @Test("a run from a font with text, or a blank, adds nothing")
+    func ordinaryRuns() {
+        #expect(SymbolGlyphs.words(runs: [run(codes: [], x: 140)], text: []).isEmpty)
+        #expect(SymbolGlyphs.words(runs: [run(codes: [32], x: 140)], text: []).isEmpty)
+    }
+
+    @Test("a symbol PDFKit did read isn't added twice")
+    func alreadyRead() {
+        let text = [word("✔", x: 141, y: 100)]
+        #expect(SymbolGlyphs.words(runs: [run(codes: [34], x: 140)], text: text).isEmpty)
+    }
+
+    @Test("a character PDFKit measured across the check marks beside it stays in its own run")
+    func swallowedGlyphs() {
+        let mono = TextRun(
+            originX: 40,
+            endX: 72.5,
+            baseline: 100,
+            size: 10,
+            style: .mono,
+            isHorizontal: true,
+            hasReliableEnd: true
+        )
+        let wide = CGRect(x: 66.5, y: 90, width: 360, height: 13)
+        let placed = PDFTextExtractor.place(wide, among: [mono, run(codes: [34], x: 140)])
+        #expect(placed.run.style == .mono)
+        #expect(placed.rect.maxX == 72.5)
     }
 }

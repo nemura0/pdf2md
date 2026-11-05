@@ -25,6 +25,8 @@ public struct Word: Sendable, Equatable {
     public var font: FontStyle
     /// No space before this word: it was split from the previous one at a font boundary.
     public var isGlued: Bool
+    /// Set at emit, not spooled: this marker points at the footnote with this label.
+    public var footnote: String?
 
     public init(
         text: String,
@@ -32,7 +34,8 @@ public struct Word: Sendable, Equatable {
         baseline: Double,
         size: Double,
         font: FontStyle,
-        isGlued: Bool = false
+        isGlued: Bool = false,
+        footnote: String? = nil
     ) {
         self.text = text
         self.rect = rect
@@ -40,6 +43,7 @@ public struct Word: Sendable, Equatable {
         self.size = size
         self.font = font
         self.isGlued = isGlued
+        self.footnote = footnote
     }
 }
 
@@ -68,12 +72,21 @@ public struct FigureCandidate: Codable, Sendable, Equatable {
     public var cropFile: String?
     /// Stored as JPEG or JPEG 2000 in the PDF, which makes it a photo.
     public var isPhoto: Bool
+    /// Drawn with paths in the page's own content, so all the words inside it are its labels.
+    public var isDrawing: Bool
 
-    public init(digest: String, rect: CGRect, cropFile: String? = nil, isPhoto: Bool = false) {
+    public init(
+        digest: String,
+        rect: CGRect,
+        cropFile: String? = nil,
+        isPhoto: Bool = false,
+        isDrawing: Bool = false
+    ) {
         self.digest = digest
         self.rect = rect
         self.cropFile = cropFile
         self.isPhoto = isPhoto
+        self.isDrawing = isDrawing
     }
 }
 

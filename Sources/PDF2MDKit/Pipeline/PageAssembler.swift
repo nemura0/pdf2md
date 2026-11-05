@@ -22,8 +22,9 @@ struct PageAssembler {
                 && !isTitleLine(line, in: record)
         }
         guard record.isSlide || !TableOfContents.isListing(content) else { return [] }
+        let footnotes = footnotes(in: content, of: record)
         let lines = OutlineMatcher.marking(
-            content,
+            footnotes.lines,
             with: profile.outlineEntries(onPage: record.index),
             minimumSize: profile.minimumHeadingSize
         )
@@ -31,7 +32,8 @@ struct PageAssembler {
             PageObject(rect: $0.rect, blocks: [.table($0.rows)], coversText: true)
         }
         let objects = ObjectPlacement.removingOverlaps(
-            tables + equations(of: record, namer: &namer) + figures(of: record, namer: &namer)
+            tables + equations(of: record, namer: &namer)
+                + figures(of: record, lines: content, namer: &namer)
         )
         // Covered lines go first, since a table's rows would read as columns of text.
         let flowing = ObjectPlacement.removingCovered(lines, by: objects)
@@ -53,11 +55,31 @@ struct PageAssembler {
                 hasText = true
             }
         }
-        return blocks
+        return blocks + footnotes.notes
     }
 
-    private func figures(of record: PageRecord, namer: inout FigureNamer) -> [PageObject] {
+    /// Slides have no notes, and OCR has no fonts to tell a marker by.
+    private func footnotes(in lines: [TextLine], of record: PageRecord) -> FootnotePage {
+        guard !record.isSlide, !record.isOCR else { return FootnotePage(lines: lines, notes: []) }
+        return Footnotes.separate(
+            lines: lines,
+            rules: record.rules,
+            blockers: record.tables.map(\.rect) + record.figures.map(\.rect),
+            pageIndex: record.index,
+            bodySize: profile.bodySize,
+            pageSize: record.size
+        )
+    }
+
+    private func figures(
+        of record: PageRecord,
+        lines: [TextLine],
+        namer: inout FigureNamer
+    ) -> [PageObject] {
         record.figures.compactMap { figure in
+            if figure.isDrawing {
+                return drawing(figure, of: record, lines: lines, namer: &namer)
+            }
             let isFirstCopy = !namer.hasCrop(for: figure.digest)
             guard let link = namer.link(for: figure, pageIndex: record.index) else { return nil }
             let inside = record.words.filter { word in
@@ -74,6 +96,27 @@ struct PageAssembler {
                 largestCoveredSize: profile.bodySize * Self.largestLabelRatio
             )
         }
+    }
+
+    /// The picture holds the arrows, and its words stay readable for an LLM that only gets the text.
+    /// With `--no-images` the words are all there is. A drawing that repeats is page furniture.
+    private func drawing(
+        _ figure: FigureCandidate,
+        of record: PageRecord,
+        lines: [TextLine],
+        namer: inout FigureNamer
+    ) -> PageObject {
+        var blocks: [Block] = []
+        if !namer.isRepeated(figure.digest) {
+            if let link = namer.link(for: figure, pageIndex: record.index) {
+                blocks.append(.figure(path: link))
+            }
+            let labels = DiagramLabels.lines(
+                from: lines.filter { ObjectPlacement.isCovered($0, by: figure.rect) }
+            )
+            if !labels.isEmpty { blocks.append(.labels(labels)) }
+        }
+        return PageObject(rect: figure.rect, blocks: blocks, coversText: true)
     }
 
     /// The linear form and its picture, side by side: the form is searchable and cheap to read,

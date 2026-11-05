@@ -16,6 +16,10 @@ struct FigureNamer {
         self.assetsName = assetsName
     }
 
+    func isRepeated(_ digest: String) -> Bool {
+        repeatedDigests.contains(digest)
+    }
+
     func hasCrop(for digest: String) -> Bool {
         namesByDigest[digest] != nil
     }

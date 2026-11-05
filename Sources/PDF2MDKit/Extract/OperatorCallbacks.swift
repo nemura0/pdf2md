@@ -33,9 +33,10 @@ private func popPoint(_ scanner: CGPDFScannerRef) -> CGPoint? {
 }
 
 /// A curve operator's endpoint: the last two of its numbers.
-private func popCurveEnd(_ scanner: CGPDFScannerRef, operands: Int) -> CGPoint? {
+/// A curve's points in order, ending with its end point.
+private func popCurve(_ scanner: CGPDFScannerRef, operands: Int) -> [CGPoint]? {
     guard let v = popNumbers(scanner, count: operands) else { return nil }
-    return CGPoint(x: v[operands - 2], y: v[operands - 1])
+    return stride(from: 0, to: operands, by: 2).map { CGPoint(x: v[$0], y: v[$0 + 1]) }
 }
 
 private func showPoppedString(_ scanner: CGPDFScannerRef, _ state: ScanState) {
@@ -168,13 +169,13 @@ enum OperatorCallbacks {
             if let point = popPoint(scanner) { scanState(info)?.lineTo(point) }
         }
         CGPDFOperatorTableSetCallback(table, "c") { scanner, info in
-            if let point = popCurveEnd(scanner, operands: 6) { scanState(info)?.curveTo(point) }
+            if let points = popCurve(scanner, operands: 6) { scanState(info)?.curveTo(points) }
         }
         CGPDFOperatorTableSetCallback(table, "v") { scanner, info in
-            if let point = popCurveEnd(scanner, operands: 4) { scanState(info)?.curveTo(point) }
+            if let points = popCurve(scanner, operands: 4) { scanState(info)?.curveTo(points) }
         }
         CGPDFOperatorTableSetCallback(table, "y") { scanner, info in
-            if let point = popCurveEnd(scanner, operands: 4) { scanState(info)?.curveTo(point) }
+            if let points = popCurve(scanner, operands: 4) { scanState(info)?.curveTo(points) }
         }
         CGPDFOperatorTableSetCallback(table, "h") { _, info in scanState(info)?.closePath() }
         CGPDFOperatorTableSetCallback(table, "re") { scanner, info in

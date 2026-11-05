@@ -9,6 +9,7 @@ final class ResolvedFont {
     private static let fixedPitchFlag = 1 << 0
     private static let italicFlag = 1 << 6
     private static let forceBoldFlag = 1 << 18
+    private static let symbolicFlag = 4
     private static let boldWeight = 600.0
     private static let maximumWidthEntries = 70_000
     private static let codeRange = 0...0xFFFF
@@ -28,6 +29,8 @@ final class ResolvedFont {
     /// Scale from glyph space to text space (0.001 except for Type3).
     private let glyphScale: Double
     let sizeScale: Double
+    /// A symbolic font with no `ToUnicode` and no `Encoding`: PDFKit can't turn its glyphs into text.
+    let hasNoTextMapping: Bool
     private let firstChar: Int
     private let widths: [Double]
     private let defaultWidth: Double
@@ -43,6 +46,11 @@ final class ResolvedFont {
 
         self.style = Self.makeStyle(name: Self.strippingSubset(baseName), descriptor: descriptor)
         self.isTwoByte = subtype == "Type0"
+        self.hasNoTextMapping =
+            !isTwoByte && CGPDFDictionaryGetStream(dictionary, "ToUnicode", nil) == false
+            && PDFValues.name(dictionary, "Encoding") == nil
+            && PDFValues.dictionary(dictionary, "Encoding") == nil
+            && (descriptor.flatMap { PDFValues.integer($0, "Flags") } ?? 0) & Self.symbolicFlag != 0
 
         if subtype == "Type3", let matrix = PDFValues.array(dictionary, "FontMatrix"),
             let scale = PDFValues.number(matrix, 0), scale > 0
