@@ -26,7 +26,10 @@ struct TextPipelineTests {
 
     @Test(
         "goldens match and hold the output invariants",
-        arguments: ["pdftex-style.pdf", "rotated.pdf", "outline-book.pdf", "unoutlined-book.pdf"]
+        arguments: [
+            "pdftex-style.pdf", "rotated.pdf", "outline-book.pdf", "unoutlined-book.pdf",
+            "drawing-book.pdf",
+        ]
     )
     func goldens(name: String) async throws {
         try await checkGolden(name)

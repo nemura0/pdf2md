@@ -22,6 +22,7 @@ enum FixtureCatalog {
             LaTeXBookFixture.make(),
             OutlineBookFixture.make(hasOutline: true),
             OutlineBookFixture.make(hasOutline: false),
+            DrawingBookFixture.make(),
             RawFixtures.rotated(),
             RawFixtures.zeroPages(),
             RawFixtures.corrupt(),
