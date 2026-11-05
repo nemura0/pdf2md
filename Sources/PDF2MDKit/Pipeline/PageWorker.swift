@@ -20,6 +20,8 @@ actor PageWorker {
     /// One open document grew 0.43 MB per page over 1500 pages (97 to 736 MB). Reopening every
     /// 100 stayed flat at 251 MB and wasn't slower (7.4 s vs 8.3 s).
     private static let recycleInterval = 100
+    /// A word's box is tighter than its ink: parentheses and summation limits reach past it.
+    private static let equationPadding = 4.0
 
     private let queue: DispatchSerialQueue
     private let url: URL
@@ -100,9 +102,20 @@ actor PageWorker {
             options.includeImages
             ? FigureFilter.kept(trace.figures, pageSize: geometry.size, isOCR: plan.needsOCR)
             : []
-        let needsRender = plan.usesVision || figures.contains { cropNames[$0.digest] == nil }
+        // OCR text is too rough to tell a stack of formulas from anything else.
+        let stacked =
+            plan.needsOCR
+            ? []
+            : StackedEquations.find(
+                in: LineBuilder.lines(from: text.words),
+                rules: trace.rules
+            )
+        let needsRender =
+            plan.usesVision || figures.contains { cropNames[$0.digest] == nil }
+            || (options.includeImages && !stacked.isEmpty)
         let rendered = needsRender ? PageRenderer.render(page, size: geometry.size) : nil
         record.figures = try cropped(figures, from: rendered)
+        record.equations = try cropped(stacked, pageIndex: pageIndex, from: rendered)
         return PreparedPage(
             record: record,
             image: plan.usesVision ? rendered?.image : nil,
@@ -132,6 +145,27 @@ actor PageWorker {
                 cropNames[figure.digest] = result.cropFile
             }
             return result
+        }
+    }
+
+    private func cropped(
+        _ equations: [StackedEquation],
+        pageIndex: Int,
+        from rendered: RenderedPage?
+    ) throws -> [EquationCrop] {
+        try equations.enumerated().map { offset, equation in
+            let rect = equation.rect.insetBy(dx: -Self.equationPadding, dy: -Self.equationPadding)
+            var crop = EquationCrop(rect: equation.rect, latex: equation.linearLatex)
+            if let rendered, let cropDirectory, options.includeImages {
+                crop.cropFile = try CropWriter.write(
+                    rendered,
+                    rect: rect,
+                    isPhoto: false,
+                    name: "equation-\(pageIndex)-\(offset)",
+                    directory: cropDirectory
+                )
+            }
+            return crop
         }
     }
 

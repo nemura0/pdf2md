@@ -91,10 +91,14 @@ public struct TableRegion: Codable, Sendable, Equatable {
 /// An equation that couldn't be rebuilt confidently, with a crop to keep next to it.
 public struct EquationCrop: Codable, Sendable, Equatable {
     public var rect: CGRect
-    public var cropFile: String
+    /// The best linear reading. The crop keeps what it loses.
+    public var latex: String
+    /// Nil with `--no-images`.
+    public var cropFile: String?
 
-    public init(rect: CGRect, cropFile: String) {
+    public init(rect: CGRect, latex: String, cropFile: String? = nil) {
         self.rect = rect
+        self.latex = latex
         self.cropFile = cropFile
     }
 }

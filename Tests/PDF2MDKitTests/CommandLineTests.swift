@@ -90,7 +90,10 @@ struct SupervisorTests {
         #expect(result.status == 1)
         #expect(result.stderr.contains("Converted 2 of 5"))
         #expect(result.stderr.contains("encrypted.pdf: password-protected"))
-        #expect(try workspace.names() == Set(names + ["book.md", "slides.md", "slides_assets", "home"]))
+        #expect(
+            try workspace.names()
+                == Set(names + ["book.md", "book_assets", "slides.md", "slides_assets", "home"])
+        )
 
         let jobs = workspace.home.appendingPathComponent("jobs")
         #expect(try workspace.names(in: jobs).isEmpty)

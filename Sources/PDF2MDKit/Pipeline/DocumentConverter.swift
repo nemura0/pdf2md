@@ -272,6 +272,7 @@ public struct DocumentConverter: Sendable {
                 let record = try spool.read(page: page)
                 let blocks = assembler.blocks(for: record, namer: &namer)
                 stats.tables += record.tables.count
+                stats.mathSpans += MathSpans.count(in: blocks)
                 try flow.write(
                     blocks,
                     pageMarker: options.includePageMarkers ? "<!-- page \(page + 1) -->" : nil,

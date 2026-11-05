@@ -218,4 +218,54 @@ struct RecognitionTests {
         let file = url.deletingLastPathComponent().appendingPathComponent(decoded)
         #expect(FileManager.default.fileExists(atPath: file.path))
     }
+
+    // MARK: Math
+
+    @Test("the book's formulas come out as LaTeX, inline and display")
+    func math() async throws {
+        for name in ["book.pdf", "book-cm.pdf"] {
+            let fixture = try fixture(name)
+            let truth = try #require(fixture.truth)
+            let harness = try ConversionHarness()
+            defer { harness.cleanUp() }
+
+            let (markdown, report, _) = try await harness.convert(fixture)
+
+            #expect(report.stats.mathSpans > 0)
+            for fragment in truth.mathFragments {
+                #expect(markdown.contains(fragment), "\(name): \(fragment)")
+            }
+            #expect(markdown.contains("$$\n"))
+            #expect(OutputInvariants.violations(in: markdown).isEmpty)
+        }
+    }
+
+    @Test("a stacked fraction has a linear form and a crop, and its text isn't repeated")
+    func stacked() async throws {
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+        let (markdown, _, url) = try await harness.convert(try fixture("book.pdf"))
+
+        let link = try #require(figureLinks(in: markdown).first)
+        #expect(link.hasPrefix("book_assets/p0003-"))
+        let file = url.deletingLastPathComponent().appendingPathComponent(link)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        let display = try #require(markdown.range(of: "/ 2n"))
+        let image = try #require(markdown.range(of: "![Figure]"))
+        #expect(display.upperBound < image.lowerBound)
+        #expect(!markdown.contains("𝑛"))
+    }
+
+    @Test("with --no-images, a stacked fraction keeps its linear form and writes no file")
+    func stackedNoImages() async throws {
+        let harness = try ConversionHarness()
+        defer { harness.cleanUp() }
+        let (markdown, report, _) = try await harness.convert(
+            try fixture("book.pdf"),
+            options: ConvertOptions(includeImages: false)
+        )
+        #expect(markdown.contains("/ 2n"))
+        #expect(!markdown.contains("![Figure]"))
+        #expect(report.stats.images == 0)
+    }
 }

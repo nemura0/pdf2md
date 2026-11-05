@@ -165,7 +165,7 @@ enum RawFixtures {
             q 1 0 0 1 72 640 cm BT /F3 10 Tf 0 0 Td (int total = 0;) Tj ET Q
             BT /F1 10 Tf 1 0 0 1 72 615 Tm 2 Tc 3 Tw 110 Tz (Spaced words here) Tj 0 Tc 0 Tw 100 Tz ET
             BT /F1 10 Tf 72 590 Td 14 TL (First leading line) Tj T* (Second leading line) Tj (Third leading line) ' ET
-            BT /F1 10 Tf 72 530 Td (Mixed) Tj /F2 10 Tf ( x) Tj /F1 10 Tf ( run on one line) Tj ET
+            BT /F1 10 Tf 72 530 Td (Mixed) Tj /F2 10 Tf (x) Tj /F1 10 Tf ( run on one line) Tj ET
             BT /F7 11 Tf 72 505 Td \(hex("Office text")) Tj ( ) Tj /F1 11 Tf 160 0 Td (after type zero) Tj ET
             q 0.5 0 0 0.5 72 400 cm /Wrap Do Q
             q 1 0 0 1 72 370 cm /Bare Do Q

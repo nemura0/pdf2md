@@ -1,5 +1,19 @@
 /// Renders a line's words to escaped Markdown, wrapping monospace runs as inline code.
 public enum InlineRenderer {
+    /// A whole line, with its math as `$...$`. Code stays code, where `$` means nothing.
+    public static func render(line: TextLine) -> String {
+        render(line.words, in: line)
+    }
+
+    /// Some of a line's words, such as a list item without its marker. Scripts are measured
+    /// against the line they're on.
+    public static func render(_ words: [Word], in line: TextLine) -> String {
+        guard !words.contains(where: \.font.isMonospace),
+            let math = MathSpans.render(words, baseline: line.baseline, size: line.size)
+        else { return render(words) }
+        return math
+    }
+
     public static func render(_ words: [Word]) -> String {
         var output = ""
         var codeRun: [Word] = []

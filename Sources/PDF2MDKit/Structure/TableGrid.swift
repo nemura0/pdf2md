@@ -69,7 +69,7 @@ public enum TableGrid {
 
     private static func text(from words: [Word]) -> String {
         LineBuilder.lines(from: words)
-            .map { InlineRenderer.render($0.words) }
+            .map { InlineRenderer.render(line: $0) }
             .joined(separator: " ")
     }
 }

@@ -23,7 +23,8 @@ struct PageAssembler {
         let tables = record.tables.map {
             PageObject(rect: $0.rect, blocks: [.table($0.rows)], coversText: true)
         }
-        let objects = tables + figures(of: record, namer: &namer)
+        let objects =
+            tables + figures(of: record, namer: &namer) + equations(of: record, namer: &namer)
         // Covered lines go first, since a table's rows would read as columns of text.
         let flowing = ObjectPlacement.removingCovered(lines, by: objects)
         var blocks: [Block] = []
@@ -57,6 +58,25 @@ struct PageAssembler {
                 rect: figure.rect,
                 blocks: [.figure(path: link)],
                 coversText: inside.count < Self.maximumFigureLabelWords
+            )
+        }
+    }
+
+    /// The linear form and its picture, side by side: the form is searchable and cheap to read,
+    /// and the picture holds the structure that the form loses (ADR-0005).
+    private func equations(of record: PageRecord, namer: inout FigureNamer) -> [PageObject] {
+        record.equations.enumerated().map { offset, equation in
+            let image = FigureCandidate(
+                digest: "equation-\(record.index)-\(offset)",
+                rect: equation.rect,
+                cropFile: equation.cropFile
+            )
+            let link = namer.link(for: image, pageIndex: record.index)
+            let figure = link.map { [Block.figure(path: $0)] } ?? []
+            return PageObject(
+                rect: equation.rect,
+                blocks: [.displayMath(equation.latex)] + figure,
+                coversText: true
             )
         }
     }

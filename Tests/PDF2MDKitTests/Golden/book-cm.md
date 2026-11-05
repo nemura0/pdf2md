@@ -52,17 +52,23 @@ To compare methods we count basic operations rather than seconds, since counts d
 
 ### Growth and notation
 
-Let the input have size 𝑛 and suppose 𝛼 ≤ 𝑥2 holds for every step 𝑥𝑖.
+Let the input have size $n$ and suppose $\alpha \leq x^2$ holds for every step $x_i$.
 
 The next equation gives the cost of the outer loop, and the one after it shows the closed form that we will derive in the workshop using a short induction argument.
 
-𝑓(𝑥) = 𝛼𝑥2 + 𝛽𝑥 + 𝛾
+$$
+f(x) = \alpha x^2 + \beta x + \gamma
+$$
 
-𝑇𝑛 ≠ ∅ ⇒ ∑ 𝑖2 ≥ 0
+$$
+T_n \neq \emptyset \Rightarrow \sum i^2 \geq 0
+$$
 
-𝑛 + 1 𝑅 =
+$$
+R = n + 1 / 2n - 1
+$$
 
-2𝑛 − 1
+![Figure](book-cm_assets/p0003-01.png)
 
 When a formula has a stacked fraction, a linear form can lose its structure, so the page keeps an image of the equation next to the best linear form available.
 

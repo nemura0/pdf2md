@@ -12,13 +12,13 @@ tool: "pdf2md 1.0.0"
 
 This line is kerned with TJ The value
 
-x2 grows, and α ≤ β holds.
+$x^2$ grows, and $\alpha \leq \beta$ holds.
 
 ```
 int total = 0;
 ```
 
-Spaced words here First leading line Second leading line Third leading line Mixedx run on one line
+Spaced words here First leading line Second leading line Third leading line Mixed$x$ run on one line
 
 ## Office text after type zero
 

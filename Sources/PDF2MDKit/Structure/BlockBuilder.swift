@@ -36,6 +36,10 @@ public struct BlockBuilder: Sendable {
         for (index, line) in lines.enumerated() {
             if line.isMonospace {
                 state.addCode(line)
+            } else if index != slideTitle, listStart(in: line) == nil,
+                let latex = MathSpans.displayLatex(line)
+            {
+                state.addDisplayMath(latex)
             } else if let level = headingLevel(
                 for: line,
                 isSlidePage: isSlidePage,
@@ -161,7 +165,7 @@ public struct BlockBuilder: Sendable {
             flushHeading()
             flushCode()
             flushList()
-            let text = InlineRenderer.render(line.words)
+            let text = InlineRenderer.render(line: line)
             guard !text.isEmpty else { return }
             if let last = paragraphLast, startsNewParagraph(line, after: last) { flushParagraph() }
             paragraph = paragraph.isEmpty ? text : Self.joining(paragraph, text)
@@ -204,7 +208,7 @@ public struct BlockBuilder: Sendable {
             flushParagraph()
             flushCode()
             flushList()
-            let text = InlineRenderer.render(line.words)
+            let text = InlineRenderer.render(line: line)
             if let current = heading, current.level == level,
                 line.baseline - current.last.baseline <= line.size * BlockBuilder.headingLineGap,
                 current.text.count < BlockBuilder.maximumHeadingLength
@@ -220,6 +224,13 @@ public struct BlockBuilder: Sendable {
             guard let current = heading else { return }
             blocks.append(.heading(level: current.level, text: current.text))
             heading = nil
+        }
+
+        // MARK: Math
+
+        mutating func addDisplayMath(_ latex: String) {
+            flush()
+            blocks.append(.displayMath(latex))
         }
 
         // MARK: Code
@@ -258,7 +269,7 @@ public struct BlockBuilder: Sendable {
                 ListItem(
                     depth: indentStack.count - 1,
                     marker: item.marker,
-                    text: InlineRenderer.render(item.words)
+                    text: InlineRenderer.render(item.words, in: line)
                 )
             )
             itemTextX = item.textX
@@ -275,7 +286,7 @@ public struct BlockBuilder: Sendable {
 
         mutating func continueList(_ line: TextLine) {
             guard var item = items.popLast() else { return }
-            item.text = Self.joining(item.text, InlineRenderer.render(line.words))
+            item.text = Self.joining(item.text, InlineRenderer.render(line: line))
             items.append(item)
             itemLast = line
         }
