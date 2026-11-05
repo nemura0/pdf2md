@@ -64,7 +64,13 @@ struct LineBuilderTests {
     @Test("a footnote marker against a URL isn't a line number")
     func footnoteMarkerIsNotALineNumber() throws {
         let marker = word("2", x: 72, y: 100, size: 5)
-        let url = word("https://example.org/", x: marker.rect.maxX + 0.5, y: 100, size: 8, font: .mono)
+        let url = word(
+            "https://example.org/",
+            x: marker.rect.maxX + 0.5,
+            y: 100,
+            size: 8,
+            font: .mono
+        )
         let line = try #require(LineBuilder.lines(from: [marker, url]).first)
         #expect(line.lineNumber == nil)
     }

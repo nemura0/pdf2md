@@ -19,6 +19,8 @@ struct PageTrace {
     var runs: [TextRun] = []
     var figures: [FigureCandidate] = []
     var rules: [RuleSegment] = []
+    /// Small filled squares, in display space. Often they're a list's bullets.
+    var marks: [CGRect] = []
 }
 
 /// Walks a page's content stream, tracking the CTM and text state. It reads font facts, image
@@ -552,6 +554,8 @@ final class ScanState {
                     endY: display.maxY
                 )
             )
+        } else if VectorBullets.isMarkShaped(display), trace.marks.count < Self.maximumRules {
+            trace.marks.append(display)
         }
     }
 

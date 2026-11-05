@@ -337,6 +337,107 @@ struct BlockBuilderTests {
         )
     }
 
+    @Test("many short paragraphs don't hide the leading, so their gaps still split them")
+    func gapsAmongShortParagraphs() {
+        // More paragraph gaps than line gaps, which is common on a page of definitions.
+        let result = blocks([
+            line(fullWidthText, y: 100), line("first ends.", y: 112),
+            line(fullWidthText, y: 132), line("second ends", y: 144),
+            line("third starts here,", y: 164),
+            line("fourth starts here,", y: 184),
+            line("fifth starts here", y: 204),
+        ])
+        #expect(result.count == 5, "\(result)")
+    }
+
+    private let fullWidthText =
+        "a full line of running text that reaches all the way across the page"
+
+    @Test("a hanging indent continues its paragraph")
+    func hangingIndent() {
+        let result = blocks([
+            line("Term " + fullWidthText, y: 100),
+            line("and goes on under an indent", x: 96, y: 112),
+            line("for one more line.", x: 96, y: 124),
+        ])
+        #expect(
+            result == [
+                .paragraph(
+                    "Term " + fullWidthText + " and goes on under an indent for one more line."
+                )
+            ]
+        )
+    }
+
+    @Test("a hanging indent continues even after a line that ends in a period")
+    func hangingAfterPeriod() {
+        let result = blocks([
+            line("Term " + fullWidthText + ".", y: 100),
+            line("And goes on under an indent", x: 96, y: 112),
+            line("for one more line.", x: 96, y: 124),
+        ])
+        #expect(
+            result == [
+                .paragraph(
+                    "Term " + fullWidthText + ". And goes on under an indent for one more line."
+                )
+            ]
+        )
+    }
+
+    @Test("a bold lead-in keeps its bold")
+    func boldLeadIn() {
+        let lineWithTerm = TextLine(
+            words: [word("Term", x: 72, y: 100, font: .bold)]
+                + words("explained in plain text.", x: 100, y: 100)
+        )
+        #expect(blocks([lineWithTerm]) == [.paragraph("**Term** explained in plain text.")])
+    }
+
+    @Test("a bold lead-in keeps its bold in a list item")
+    func boldLeadInListItem() {
+        let item = TextLine(
+            words: [word("•", x: 72, y: 100), word("Term", x: 82, y: 100, font: .bold)]
+                + words("explained in plain text.", x: 110, y: 100)
+        )
+        let expected = ListItem(depth: 0, marker: "-", text: "**Term** explained in plain text.")
+        #expect(blocks([item]) == [.list([expected])])
+    }
+
+    @Test("code wrapped from a full line of text stays in its paragraph")
+    func wrappedInlineCode() {
+        let lastWord = word("arreglo.", x: 400, y: 100, font: .mono)
+        let first = TextLine(words: words(fullWidthText, y: 100) + [lastWord])
+        let tail = TextLine(words: [word("length", x: 72, y: 112, font: .mono)])
+        #expect(blocks([first, tail]) == [.paragraph(fullWidthText + " `arreglo.` `length`")])
+    }
+
+    @Test("a URL wrapped across lines is rejoined")
+    func wrappedURL() {
+        let url = word("http://creative.", x: 400, y: 100, font: .mono)
+        let first = TextLine(words: words(fullWidthText, y: 100) + [url])
+        let tail = TextLine(words: [word("org/licenses/", x: 72, y: 112, font: .mono)])
+        let expected = fullWidthText + " `http://creative.org/licenses/`"
+        #expect(blocks([first, tail]) == [.paragraph(expected)])
+    }
+
+    @Test("a code line after a short line of text is a block, not a wrapped word")
+    func codeAfterShortLine() {
+        let intro = line("Por ejemplo:", y: 100)
+        let code = TextLine(words: [word("java", x: 72, y: 112, font: .mono)])
+        #expect(blocks([intro, code]) == [.paragraph("Por ejemplo:"), .code(["java"])])
+    }
+
+    @Test("a listing right after a full line of text is still a block")
+    func listingAfterFullLine() {
+        let intro = line(fullWidthText, y: 100)
+        let first = TextLine(words: [word("java", x: 72, y: 112, font: .mono)])
+        let second = TextLine(words: [word("Main", x: 72, y: 124, font: .mono)])
+        #expect(
+            blocks([intro, first, second]) == [.paragraph(fullWidthText), .code(["java", "Main"])]
+        )
+    }
+
     @Test("a first-line indent starts a new paragraph without any gap")
     func indent() {
         let result = blocks([
