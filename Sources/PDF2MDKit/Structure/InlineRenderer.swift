@@ -26,8 +26,12 @@ public enum InlineRenderer {
     }
 
     /// Words that are all code, as a code span.
+    /// A span of code. Punctuation closing it belongs to the sentence around it.
     public static func code(_ words: [Word]) -> String {
-        codeSpan(TextNormalizer.normalize(joined(words)))
+        let text = TextNormalizer.normalize(joined(words))
+        let closing = text.reversed().prefix { ".,".contains($0) }.count
+        guard closing > 0, closing < text.count else { return codeSpan(text) }
+        return codeSpan(String(text.dropLast(closing))) + String(text.suffix(closing))
     }
 
     public static func render(_ words: [Word]) -> String {

@@ -1,7 +1,7 @@
 ---
 title: "Libro de Dibujos"
 source: "drawing-book.pdf"
-pages: 3
+pages: 4
 converted: "2026-01-01"
 tool: "pdf2md 1.0.0"
 ---
@@ -75,3 +75,30 @@ Y una tabla de marcas:
 | --- | --- |
 | public | ✔ |
 | private | ✔ |
+
+<!-- page 4 -->
+
+## Ejercicios
+
+```
+1 public class Main
+2 {
+3     void run()
+4     {
+5     ...
+6     }
+7 }
+```
+
+$$
+CostoTotal= Precio
+$$
+
+- a) Asigna una variable con cero
+- f) Si es menor entonces asigna otra
+- g) Si es igual termina el proceso
+1. Revisa el codigo fuente de la clase para que veas como esta hecho aquel metodo `toString()`.
+
+Y el texto sigue despues de todo esto.
+
+Para mas informacion se puede visitar `https://example.org/docs/page.html`

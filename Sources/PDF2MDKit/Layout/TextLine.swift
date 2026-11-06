@@ -7,7 +7,7 @@ public struct TextLine: Sendable, Equatable {
     private static let styleShare = 0.9
     /// Line numbers are set no larger than the code beside them, usually much smaller. A word
     /// space is a third of a font size, so a gutter is at least this much wider.
-    private static let minimumGutterGap = 0.5
+    static let minimumGutterGap = 0.5
     private static let maximumLineNumberDigits = 5
 
     public let words: [Word]

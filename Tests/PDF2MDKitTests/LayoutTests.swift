@@ -131,6 +131,58 @@ struct LineBuilderTests {
     }
 }
 
+/// TeX leaves no spaces between the letters of a word in math. PDFKit reads the slant after some
+/// capitals as one: measured 1.4 to 2.2 points at size 10 on a real book.
+@Suite("Math words split by PDFKit")
+struct SplitMathWordTests {
+    private let mathItalic = FontStyle(
+        name: "ABCDEF+LMMathItalic10-Regular",
+        isBold: false,
+        isItalic: true,
+        isMonospace: false
+    )
+
+    private func joined(_ first: String, _ second: String, gap: Double, font: FontStyle) -> String {
+        let start = word(first, x: 100, y: 200, font: font)
+        let rest = word(second, x: Double(start.rect.maxX) + gap, y: 200, font: font)
+        return LineBuilder.lines(from: [start, rest]).first?.text ?? ""
+    }
+
+    @Test(
+        "a word splits only after a capital, with the slant's gap",
+        arguments: [("CostoT", "otal", 1.39), ("P", "recioBase", 1.38), ("horasDeV", "uelo", 2.21)]
+    )
+    func joinsAfterCapital(first: String, second: String, gap: Double) {
+        #expect(joined(first, second, gap: gap, font: mathItalic) == first + second)
+    }
+
+    @Test("a chain of splits comes back as one word")
+    func chain() {
+        let first = word("horasDeV", x: 100, y: 200, font: mathItalic)
+        let second = word("ueloT", x: Double(first.rect.maxX) + 2.2, y: 200, font: mathItalic)
+        let third = word("otales", x: Double(second.rect.maxX) + 1.4, y: 200, font: mathItalic)
+        #expect(
+            LineBuilder.lines(from: [first, second, third]).first?.text == "horasDeVueloTotales"
+        )
+    }
+
+    @Test("a formula rendered from them holds whole names")
+    func rendered() throws {
+        let first = word("CostoT", x: 100, y: 200, font: mathItalic)
+        let second = word("otal", x: Double(first.rect.maxX) + 1.39, y: 200, font: mathItalic)
+        let line = try #require(LineBuilder.lines(from: [first, second]).first)
+        #expect(InlineRenderer.render(line: line) == "$CostoTotal$")
+    }
+
+    @Test("letters apart in math, a wider gap, or text in another font stay as they are")
+    func keepsTheRest() {
+        #expect(joined("a", "b", gap: 1.5, font: mathItalic) == "a b")
+        #expect(joined("T", "otal", gap: 5, font: mathItalic) == "T otal")
+        #expect(joined("Cap", "T", gap: 1.5, font: mathItalic) == "Cap T")
+        #expect(joined("A", "word", gap: 1.5, font: .body) == "A word")
+    }
+}
+
 @Suite("ReadingOrder")
 struct ReadingOrderTests {
     private func column(_ prefix: String, x: Double, from y: Double, count: Int) -> [TextLine] {

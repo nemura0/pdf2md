@@ -21,6 +21,9 @@ public struct BlockBuilder: Sendable {
     /// Code that wraps from a line of text sits at that text's leading. A real code block has
     /// space above it, or a smaller font.
     private static let wrappedCodeGapRatio = 1.35
+    /// A URL set on its own line sits apart from the sentence leading to it. Measured on a real
+    /// book: 28 to 30 points at size 10.
+    private static let displayedLinkGapRatio = 3.5
     /// A piece of a page between two figures can hold only short lines, and the longest of them
     /// isn't a full line. Even a narrow column is wider than this, in font sizes.
     private static let minimumFullLineSizes = 20.0
@@ -44,7 +47,9 @@ public struct BlockBuilder: Sendable {
             let next = index + 1 < lines.count ? lines[index + 1] : nil
             if let level = line.outlineLevel {
                 state.addOutlineHeading(line, level: level)
-            } else if state.isWrappedCode(line, next: next) {
+            } else if state.isWrappedCode(line, next: next)
+                || state.isDisplayedLink(line, next: next)
+            {
                 state.addWrappedCode(line)
             } else if line.isMonospace || isBlankListingLine(at: index, in: lines) {
                 state.addCode(line)
@@ -125,8 +130,29 @@ public struct BlockBuilder: Sendable {
         return nil
     }
 
+    /// Markdown has no lettered lists, so the item keeps its letter: it's how the text cites it. An
+    /// italic letter and an upright parenthesis are two words, apart if the letter leans, as in
+    /// `f )`.
+    private func letteredItem(in line: TextLine) -> PendingItem? {
+        guard let first = line.words.first else { return nil }
+        let isSplit =
+            line.words.count > 1 && line.words[1].text == ")" && first.text.count == 1
+            && first.text.first?.isLowercase == true
+        guard isSplit || ListMarker.isLettered(first.text) else { return nil }
+        var label = first
+        if isSplit { label.text += ")" }
+        let rest = line.words.dropFirst(isSplit ? 2 : 1)
+        return PendingItem(
+            marker: "-",
+            markerX: first.rect.minX,
+            textX: Double(rest.first?.rect.minX ?? first.rect.maxX),
+            words: [label] + rest
+        )
+    }
+
     private func listStart(in line: TextLine) -> PendingItem? {
         guard let first = line.words.first else { return nil }
+        if let item = letteredItem(in: line) { return item }
         if let marker = ListMarker.marker(forToken: first.text) {
             return PendingItem(
                 marker: marker,
@@ -231,9 +257,9 @@ public struct BlockBuilder: Sendable {
         /// like a line of code. The line above gives it away: a full line of text at the same
         /// leading can't have ended there.
         func isWrappedCode(_ line: TextLine, next: TextLine?) -> Bool {
-            guard line.isMonospace, line.lineNumber == nil, let last = paragraphLast else {
-                return false
-            }
+            guard line.isMonospace, line.lineNumber == nil, let last = paragraphLast ?? itemLast,
+                paragraphLast != nil || continuesList(line)
+            else { return false }
             let reach = line.size * BlockBuilder.wrappedCodeGapRatio
             let gap = line.baseline - last.baseline
             guard gap > 0, gap <= reach, !isShort(last),
@@ -241,18 +267,44 @@ public struct BlockBuilder: Sendable {
                 max(line.size, last.size) / max(min(line.size, last.size), 0.1)
                     <= BlockBuilder.sizeChangeRatio
             else { return false }
+            return endsCode(line, next: next, reach: reach)
+        }
+
+        /// The end of a sentence, as in `la documentación oficial en`. After a colon, the URL is
+        /// on show and stays there.
+        func isDisplayedLink(_ line: TextLine, next: TextLine?) -> Bool {
+            guard line.isMonospace, line.lineNumber == nil, line.words.count == 1,
+                let text = line.words.first?.text, text.contains("://"),
+                let last = paragraphLast, !Self.endsSentence(last)
+            else { return false }
+            let reach = line.size * BlockBuilder.displayedLinkGapRatio
+            let gap = line.baseline - last.baseline
+            return gap > 0 && gap <= reach && endsCode(line, next: next, reach: reach)
+        }
+
+        private func endsCode(_ line: TextLine, next: TextLine?, reach: Double) -> Bool {
             guard let next, next.isMonospace else { return true }
             return next.baseline - line.baseline > reach
         }
 
+        private static func endsSentence(_ line: TextLine) -> Bool {
+            line.text.last.map { ".:!?)".contains($0) } ?? false
+        }
+
         mutating func addWrappedCode(_ line: TextLine) {
             let span = InlineRenderer.code(line.words)
-            if Self.endsInURL(paragraph) {
-                paragraph = String(paragraph.dropLast()) + span.dropFirst()
+            if paragraph.isEmpty, var item = items.popLast() {
+                item.text = Self.appending(span, to: item.text)
+                items.append(item)
+                itemLast = line
             } else {
-                paragraph = Self.joining(paragraph, span)
+                paragraph = Self.appending(span, to: paragraph)
+                paragraphLast = line
             }
-            paragraphLast = line
+        }
+
+        private static func appending(_ span: String, to text: String) -> String {
+            endsInURL(text) ? String(text.dropLast()) + span.dropFirst() : joining(text, span)
         }
 
         /// True when the text ends in a code span holding a URL, the usual thing to wrap.
@@ -276,7 +328,7 @@ public struct BlockBuilder: Sendable {
             let gap = line.baseline - last.baseline
             let ratio = max(line.size, last.size) / max(min(line.size, last.size), 0.1)
             if ratio > BlockBuilder.sizeChangeRatio { return true }
-            let endsSentence = last.text.last.map { ".:!?)".contains($0) } ?? false
+            let endsSentence = Self.endsSentence(last)
             if gap < 0 { return endsSentence }  // A column break.
             if gap > leading(for: line) * BlockBuilder.paragraphGapRatio { return true }
 

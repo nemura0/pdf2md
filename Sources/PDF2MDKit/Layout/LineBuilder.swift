@@ -14,11 +14,15 @@ public enum LineBuilder {
     /// no wider. Measured on a real book: 0.245 font sizes per letter, where about 0.5 is normal.
     private static let overprintWidthShare = 0.35
     private static let minimumOverprintLength = 6
+    /// TeX leaves no spaces between the letters of a word in math, and PDFKit reads the slant after
+    /// some capitals as one. Measured on a real book: 1.4 to 2.2 points at size 10.
+    private static let mathSlantGap = 0.3
 
     public static func lines(from words: [Word]) -> [TextLine] {
         clusters(of: words.map(collapsingOverprint)).flatMap { cluster -> [TextLine] in
             let sorted = cluster.sorted { $0.rect.minX < $1.rect.minX }
-            return segments(of: removingDuplicates(sorted)).map(TextLine.init(words:))
+            return segments(of: gluingMathWords(removingDuplicates(sorted)))
+                .map(TextLine.init(words:))
         }
     }
 
@@ -69,6 +73,27 @@ public enum LineBuilder {
             kept.append(word)
         }
         return kept
+    }
+
+    /// `CostoT otal` and `P recioBase` are one name each. Only a capital leans that far, so `a b`
+    /// stays as it is.
+    private static func gluingMathWords(_ words: [Word]) -> [Word] {
+        words.enumerated().map { offset, word in
+            guard offset > 0, isSlantGap(after: words[offset - 1], before: word) else {
+                return word
+            }
+            var glued = word
+            glued.isGlued = true
+            return glued
+        }
+    }
+
+    private static func isSlantGap(after previous: Word, before word: Word) -> Bool {
+        guard previous.text.last?.isUppercase == true, word.text.first?.isLowercase == true,
+            previous.baseline == word.baseline,
+            word.rect.minX - previous.rect.maxX < word.size * mathSlantGap
+        else { return false }
+        return MathSpans.isMath(previous) && MathSpans.isMath(word)
     }
 
     /// Splits at column gaps. Monospace words never split, since wide gaps there are alignment,

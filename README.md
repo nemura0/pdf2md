@@ -203,17 +203,17 @@ on generated PDFs. Peak memory is the whole process tree.
 
 | Input | Pages | Time | Pages/s | Peak memory |
 |---|---:|---:|---:|---:|
-| Text | 175 | 2.3 s | 76.8 | 114 MB |
-| Text | 350 | 4.5 s | 78.0 | 188 MB |
-| Text | 700 | 9.0 s | 78.0 | 214 MB |
-| Text | 1400 | 17.7 s | 79.0 | 218 MB |
+| Text | 175 | 1.1 s | 162.0 | 117 MB |
+| Text | 350 | 2.1 s | 168.3 | 189 MB |
+| Text | 700 | 4.1 s | 170.7 | 215 MB |
+| Text | 1400 | 8.0 s | 174.1 | 222 MB |
 | Slides | 400 | 48.1 s | 8.3 | 276 MB |
 | Scanned | 300 | 24.9 s | 12.1 | 726 MB |
 | Scanned | 700 | 55.0 s | 12.7 | 851 MB |
 | Scanned | 1400 | 127.9 s | 10.9 | 913 MB |
-| Three files at once (text and slides) | 2500 | 30.1 s | 83.2 | 651 MB |
+| Three files at once (text and slides) | 2500 | 20.8 s | 120.0 | 632 MB |
 
-Text memory levels off: doubling from 700 to 1400 pages adds 4 MB. Scanned files use more because
+Text memory levels off: doubling from 700 to 1400 pages adds 7 MB. Scanned files use more because
 Vision works on full-page renders, and the figures above also count the memory-mapped PDF. Growth
 slows as scans get longer: 726 MB at 300 pages, 851 MB at 700 and 913 MB at 1400. In a sampled 1400-page
 run, physical footprint peaked at about 580 MB early on, then stayed between 350 and 440 MB until
