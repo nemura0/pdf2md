@@ -9,6 +9,13 @@ struct ExtractedText {
     var unmatched = 0
 }
 
+/// A stretch of one word in one style.
+struct WordPiece {
+    var run: TextRun
+    var text: String
+    var rect: CGRect
+}
+
 /// Combines PDFKit's text and word rectangles with the content stream's font facts.
 ///
 /// Text comes from `page.string` through `selection(for: NSRange)`, which stays aligned with it,
@@ -169,7 +176,7 @@ enum PDFTextExtractor {
         geometry: DisplayGeometry
     ) -> [Word] {
         let text = token as NSString
-        var pieces: [(run: TextRun, text: String, rect: CGRect)] = []
+        var pieces: [WordPiece] = []
         var location = 0
         while location < text.length {
             let composed = text.rangeOfComposedCharacterSequence(at: location)
@@ -186,12 +193,25 @@ enum PDFTextExtractor {
                 pieces[pieces.count - 1].text += piece
                 pieces[pieces.count - 1].rect = last.rect.union(rect)
             } else {
-                pieces.append((run, piece, rect))
+                pieces.append(WordPiece(run: run, text: piece, rect: rect))
             }
         }
-        return pieces.enumerated().map { offset, piece in
-            word(piece.text, rect: piece.rect, run: piece.run, isGlued: offset > 0)
+        return words(from: pieces)
+    }
+
+    /// A word's pieces are glued, whatever their rects say: kerning and scripts leave gaps inside
+    /// `LaTeX` and `10^-45`. The exception is a listing's `5...`, where PDFKit runs a line number
+    /// into its code with no space between them.
+    static func words(from pieces: [WordPiece]) -> [Word] {
+        pieces.enumerated().map { offset, piece in
+            let isGlued = offset > 0 && !isGutter(between: pieces[offset - 1], and: piece)
+            return word(piece.text, rect: piece.rect, run: piece.run, isGlued: isGlued)
         }
+    }
+
+    private static func isGutter(between first: WordPiece, and second: WordPiece) -> Bool {
+        !first.run.style.isMonospace && second.run.style.isMonospace
+            && second.rect.minX - first.rect.maxX >= second.run.size * TextLine.minimumGutterGap
     }
 
     /// A character's run, and its real extent. PDFKit gives glyphs with no text to the character
@@ -201,6 +221,17 @@ enum PDFTextExtractor {
         let size = runs.map(\.size).max() ?? 0
         let spot = min(rect.midX, rect.minX + size * characterSpotShare)
         let run = runs.last { $0.originX <= spot } ?? runs[0]
+        if let reached = codeAcrossGap(from: spot, to: rect.maxX, among: runs) {
+            return (
+                reached,
+                CGRect(
+                    x: reached.originX,
+                    y: rect.minY,
+                    width: rect.maxX - reached.originX,
+                    height: rect.height
+                )
+            )
+        }
         guard run.hasReliableEnd, rect.maxX > run.endX + endTolerance, run.endX > rect.minX else {
             return (run, rect)
         }
@@ -208,6 +239,24 @@ enum PDFTextExtractor {
             run,
             CGRect(x: rect.minX, y: rect.minY, width: run.endX - rect.minX, height: rect.height)
         )
+    }
+
+    /// PDFKit shares the gap between a line number and its code among the characters around it. On
+    /// a real book, the first dot of a listing's `...` measured 26 points wide, starting at its
+    /// line number. `runs` holds one run per style, in x order, so being outside them proves little
+    /// by itself: the `X` of `TeX` is, too. It has to reach well into the code as well.
+    private static func codeAcrossGap(
+        from spot: Double,
+        to end: Double,
+        among runs: [TextRun]
+    ) -> TextRun? {
+        let isInRun = runs.contains { run in
+            run.originX <= spot && (!run.hasReliableEnd || spot <= run.endX + endTolerance)
+        }
+        guard !isInRun else { return nil }
+        return runs.first { run in
+            run.style.isMonospace && run.originX > spot && run.originX < end - endTolerance
+        }
     }
 
     private static func isSameStyle(_ first: TextRun, _ second: TextRun) -> Bool {

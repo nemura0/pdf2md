@@ -20,6 +20,9 @@ public enum ListMarker {
         if token.count == 1, let character = token.first, bullets.contains(character) {
             return "-"
         }
+        // Every other marker ends like this. Most lines open with a word that doesn't, and running
+        // the expressions below on each one cost a third of a text page's time (make bench).
+        guard token.hasSuffix(".") || token.hasSuffix(")") else { return nil }
         if let match = token.wholeMatch(of: /\(?(\d{1,3})[.)]/) {
             let opensParenthesis = token.hasPrefix("(")
             if opensParenthesis, !token.hasSuffix(")") { return nil }
@@ -28,6 +31,11 @@ public enum ListMarker {
         if token.wholeMatch(of: /\(?[a-z]\)|[a-z]\./) != nil { return "-" }
         if token.wholeMatch(of: /\(?(i{1,3}|iv|v|vi{1,3}|ix|x)\)/) != nil { return "-" }
         return nil
+    }
+
+    /// True for a marker with a letter in it, like `a)` or `iv)`.
+    public static func isLettered(_ token: String) -> Bool {
+        token.contains(where: \.isLetter) && marker(forToken: token) != nil
     }
 
     /// Splits `•text`, where the bullet is attached to its first word.

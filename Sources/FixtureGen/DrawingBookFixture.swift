@@ -11,6 +11,9 @@ enum DrawingBookFixture {
     private static let scriptRise = 3.6
     /// In a table's rows, this cell is a check mark from the symbol font, code 34.
     private static let checkMark = "(check)"
+    /// In a listing, lines left out, starting at the code's indent with no space drawn before it.
+    private static let elision = "..."
+    private static let elisionIndent = 18.4
 
     private static func font(_ name: String, flags: Int, width: Int, encoded: Bool = true) -> String
     {
@@ -31,6 +34,8 @@ enum DrawingBookFixture {
         /Bold \(font("ABCDEF+LMSans10-Bold", flags: 262176, width: 500)) \
         /Tiny \(font("ABCDEF+LMSans8-Regular", flags: 32, width: 530)) \
         /Mono \(font("ABCDEF+LMMono8-Regular", flags: 33, width: 578)) \
+        /Ital \(font("ABCDEF+LMSans10-Oblique", flags: 96, width: 450)) \
+        /Math \(font("ABCDEF+LMMathItalic10-Regular", flags: 4, width: 450)) \
         /Sym \(font("ABCDEF+bbding", flags: 4, width: 1000, encoded: false))
         """
     }
@@ -119,7 +124,8 @@ enum DrawingBookFixture {
             let y = top - Double(offset) * codeLeading
             let number = text("\(offset + 1)", font: "Tiny", size: 4.981, x: x - 7.6, y: y)
             guard let code else { return number }
-            return number + text(code, font: "Mono", size: 7.97, x: x, y: y)
+            let indent = code == elision ? elisionIndent : 0
+            return number + text(code, font: "Mono", size: 7.97, x: x + indent, y: y)
         }.joined()
     }
 
@@ -197,6 +203,47 @@ enum DrawingBookFixture {
             )
     }
 
+    /// An exercise's letter is italic and its parenthesis isn't, so PDFKit has them as two words,
+    /// and an `f` leans far enough to get a space before it.
+    private static func letteredItem(
+        _ letter: String,
+        _ gap: Double,
+        _ text: String,
+        y: Double
+    ) -> String {
+        Self.text(letter, font: "Ital", x: 60, y: y)
+            + Self.text("\\)", x: 64.5 + gap, y: y)
+            + Self.text(text, x: 74, y: y)
+    }
+
+    private static func exercisesPage() -> String {
+        text("Ejercicios", font: "Bold", size: 14.3, y: 622)
+            + listing(
+                ["public class Main", "{", "    void run()", "    {", elision, "    }", "}"],
+                x: textX,
+                top: 605
+            )
+            // Math italic leans past its own width, and PDFKit reads that as a word space.
+            + text("CostoT", font: "Math", x: 150, y: 520)
+            + text("otal", font: "Math", x: 178.3, y: 520)
+            + text("=", x: 198, y: 520)
+            + text("P", font: "Math", x: 210, y: 520)
+            + text("recio", font: "Math", x: 216, y: 520)
+            + letteredItem("a", 0, "Asigna una variable con cero", y: 490)
+            + letteredItem("f", 2, "Si es menor entonces asigna otra", y: 478)
+            + letteredItem("g", 0, "Si es igual termina el proceso", y: 466)
+            + body(
+                [
+                    "1. Revisa el codigo fuente de la clase para que veas como esta hecho aquel metodo"
+                ],
+                top: 440
+            )
+            + text("toString().", font: "Mono", size: 9.963, x: 47, y: 428)
+            + body(["Y el texto sigue despues de todo esto."], top: 400)
+            + body(["Para mas informacion se puede visitar"], top: 370)
+            + text("https://example.org/docs/page.html", font: "Mono", x: 63, y: 341)
+    }
+
     static func make() -> Fixture {
         var writer = RawPDFWriter()
         let pagesNumber = writer.reserve()
@@ -205,6 +252,7 @@ enum DrawingBookFixture {
                 + body(["Un libro corto para probar lo que se dibuja."], top: 450),
             diagramPage(),
             listingsPage(),
+            exercisesPage(),
         ]
         let kids = contents.map { content in
             let stream = writer.addStream(content)
